@@ -100,11 +100,85 @@ const REWARDS_KEY = 'homework-hero-rewards'
 
 function getCurrentRank(points: number): typeof RANKS[0] { return RANKS.find(r => points >= r.minPoints && points < r.maxPoints) || RANKS[0] }
 
-function SVGRingProgress({ progress, color, size = 280, strokeWidth = 12 }: { progress: number; color: string; size?: number; strokeWidth?: number }) {
+function SVGRingProgress({ progress, size = 256, strokeWidth = 12 }: { progress: number; size?: number; strokeWidth?: number }) {
   const radius = (size - strokeWidth) / 2
   const circumference = radius * 2 * Math.PI
   const strokeDashoffset = circumference - (progress / 100) * circumference
-  return (<svg width={size} height={size} className="transform -rotate-90"><circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#E5E7EB" strokeWidth={strokeWidth} /><circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} className="transition-all duration-1000" /></svg>)
+  
+  // 动态颜色: <50% 绿色, 50-80% 橙色, >80% 红色
+  const getColor = () => {
+    if (progress < 50) return '#4ECDC4' // 绿色
+    if (progress < 80) return '#FFB347' // 橙色
+    return '#FF6B6B' // 红色
+  }
+  
+  const color = getColor()
+  const glowRadius = radius + strokeWidth / 2
+  
+  return (
+    <svg width={size} height={size} viewBox="0 0 256 256" className="transform -rotate-90">
+      {/* 外圈发光效果 */}
+      <defs>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+          <feMerge>
+            <feMergeNode in="coloredBlur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
+      
+      {/* 背景圆环 */}
+      <circle 
+        cx={128} 
+        cy={128} 
+        r={radius} 
+        fill="none" 
+        stroke="#E5E7EB" 
+        strokeWidth={strokeWidth} 
+      />
+      
+      {/* 外圈发光装饰 */}
+      <circle 
+        cx={128} 
+        cy={128} 
+        r={glowRadius} 
+        fill="none" 
+        stroke={color} 
+        strokeWidth={2} 
+        strokeLinecap="round" 
+        opacity={0.3}
+        filter="url(#glow)"
+      />
+      
+      {/* 进度圆环 */}
+      <circle 
+        cx={128} 
+        cy={128} 
+        r={radius} 
+        fill="none" 
+        stroke={color} 
+        strokeWidth={strokeWidth} 
+        strokeLinecap="round" 
+        strokeDasharray={circumference} 
+        strokeDashoffset={strokeDashoffset} 
+        className="transition-all duration-1000"
+        filter="url(#glow)"
+      />
+      
+      {/* 内圈装饰 */}
+      <circle 
+        cx={128} 
+        cy={128} 
+        r={radius - strokeWidth - 8} 
+        fill="none" 
+        stroke={color} 
+        strokeWidth={1} 
+        strokeLinecap="round" 
+        opacity={0.2}
+      />
+    </svg>
+  )
 }
 
 function PomodoroTimer({ task, onComplete, onCancel }: { task: HomeworkTask; onComplete: (points: number, isOvertime: boolean, distractions: Distraction[]) => void; onCancel: () => void }) {
@@ -145,10 +219,25 @@ function PomodoroTimer({ task, onComplete, onCancel }: { task: HomeworkTask; onC
   const currentPoints = calculateCurrentPoints()
   const expectedPoints = calculateExpectedPoints(task.plannedDuration)
   const color = getColor()
+  
+  // 动态背景颜色
+  const getBgColor = () => {
+    if (isOvertime) return 'bg-red-50'
+    if (progress > 80) return 'bg-red-50'
+    if (progress > 50) return 'bg-orange-50'
+    return 'bg-white/95'
+  }
+  
+  const getCardBg = () => {
+    if (isOvertime) return 'bg-red-100 border-4 border-red-400 animate-pulse'
+    if (progress > 80) return 'bg-red-50 border-4 border-red-300'
+    if (progress > 50) return 'bg-orange-50 border-4 border-orange-300'
+    return 'bg-white border-2 border-[#FFE66D]'
+  }
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isOvertime ? 'bg-red-50' : 'bg-white/95'}`}>
-      <div className={`w-full max-w-md rounded-3xl shadow-2xl overflow-hidden ${isOvertime ? 'bg-red-100 border-4 border-red-400 animate-pulse' : 'bg-white border-2 border-[#FFE66D]'}`}>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${getBgColor()}`}>
+      <div className={`w-full max-w-md rounded-3xl shadow-2xl overflow-hidden ${getCardBg()}`}>
         <div className={`px-6 py-4 ${isOvertime ? 'bg-red-200' : 'bg-gradient-to-r from-[#FFE66D]/30 to-[#FF6B6B]/10'}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -171,13 +260,17 @@ function PomodoroTimer({ task, onComplete, onCancel }: { task: HomeworkTask; onC
           </div>
         </div>
         <div className="px-6 py-2">
-          <div className="h-3 bg-gray-200 rounded-full overflow-hidden"><div className="h-full transition-all duration-1000" style={{ width: `${progress}%`, backgroundColor: isOvertime ? '#FF6B6B' : color }} /></div>
+          <div className="h-3 bg-gray-200 rounded-full overflow-hidden"><div className="h-full transition-all duration-1000" style={{ width: `${progress}%`, backgroundColor: isOvertime ? '#FF6B6B' : (progress < 50 ? '#4ECDC4' : progress < 80 ? '#FFB347' : '#FF6B6B') }} /></div>
           <div className="flex justify-between text-xs text-gray-400 mt-1"><span>已完成 {Math.round(progress)}%</span><span>剩余 {Math.round(100 - progress)}%</span></div>
         </div>
         <div className="px-6 py-8 text-center relative">
-          <div className="absolute top-4 right-4"><SVGRingProgress progress={progress} color={color} size={100} strokeWidth={8} /><div className="absolute inset-0 flex items-center justify-center"><span className="text-lg font-bold text-gray-700">{Math.round(progress)}%</span></div></div>
-          <div className={`text-6xl font-black mb-4 tracking-wider ${isOvertime ? 'text-red-500' : 'text-gray-800'}`}>{formatTime(timeLeft)}</div>
-          {distractions.length > 0 && <div className="mb-4 flex flex-wrap justify-center gap-1">{distractions.map((d) => (<span key={d.id} className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs">{DISTRACTIONS.find(dd => dd.type === d.type)?.emoji} {d.type}</span>))}</div>}
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+            <SVGRingProgress progress={progress} size={260} strokeWidth={14} />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-6xl font-black tracking-wider text-gray-800">{formatTime(timeLeft)}</span>
+            </div>
+          </div>
+          {distractions.length > 0 && <div className="mb-4 flex flex-wrap justify-center gap-1 mt-32">{distractions.map((d) => (<span key={d.id} className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs">{DISTRACTIONS.find(dd => dd.type === d.type)?.emoji} {d.type}</span>))}</div>}
           <div className="flex justify-center gap-3">
             {!isRunning ? (<button onClick={handleStart} className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-[#4ECDC4] to-[#A8E6CF] text-white rounded-full font-bold text-lg shadow-lg hover:scale-105 transition-transform"><Play className="w-6 h-6" /> 开始</button>) : (<button onClick={handlePause} className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-[#FFE66D] to-[#FFB347] text-white rounded-full font-bold text-lg shadow-lg hover:scale-105 transition-transform"><Pause className="w-6 h-6" /> 暂停</button>)}
             <button onClick={handleReset} className="p-3 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors"><RotateCcw className="w-6 h-6 text-gray-600" /></button>
@@ -377,7 +470,7 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
           <div className="bg-white rounded-2xl p-4 shadow-lg mb-3 border-2 border-[#4ECDC4]/30">
             <input type="text" value={newTaskName} onChange={(e) => setNewTaskName(e.target.value)} placeholder="输入作业名称..." className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none mb-3 text-sm" autoFocus />
             <div className="flex gap-1.5 mb-3 overflow-x-auto">{SUBJECTS.map(s => (<button key={s.name} onClick={() => setNewTaskSubject(s.name)} className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${newTaskSubject === s.name ? s.color + ' ring-2 ring-[#FF6B6B]' : 'bg-gray-100'}`}>{s.emoji} {s.name}</button>))}</div>
-            <div className="mb-3"><label className="block text-xs text-gray-500 mb-1">计划时长</label><select value={newTaskDuration} onChange={(e) => setNewTaskDuration(Number(e.target.value))} className="w-full px-2 py-1.5 border-2 border-[#FF6B6B] rounded-xl text-sm">{[...Array(120)].map((_, i) => <option key={i + 1} value={i + 1}>{i + 1}分钟</option>)}</select></div>
+            <div className="mb-3"><label className="block text-xs text-gray-500 mb-1">计划时长 (1-120分钟)</label><input type="number" min="1" max="120" value={newTaskDuration} onChange={(e) => { const val = Number(e.target.value); if (val >= 1 && val <= 120) setNewTaskDuration(val); else if (val > 120) setNewTaskDuration(120); else if (val < 1) setNewTaskDuration(1); }} className="w-full px-2 py-1.5 border-2 border-[#FF6B6B] rounded-xl text-sm" placeholder="输入1-120之间的分钟数" /></div>
             <div className="flex gap-2"><button onClick={addTask} className="flex-1 py-2 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-medium text-sm">添加</button><button onClick={() => setShowAddTask(false)} className="px-4 py-2 bg-gray-200 text-gray-600 rounded-xl font-medium text-sm">取消</button></div>
           </div>
         )}
