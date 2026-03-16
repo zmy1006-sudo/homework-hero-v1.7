@@ -1,9 +1,11 @@
-export type UserRole = 'parent' | 'child'
+export type UserRole = 'parent' | 'child' | 'teacher'
 
 export interface UserInfo {
   id: string
   nickname: string
   role: UserRole
+  phone?: string
+  grade?: string
 }
 
 const USER_KEY = 'homework-hero-user'
