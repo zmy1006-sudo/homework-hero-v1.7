@@ -1,50 +1,66 @@
-# React + TypeScript + Vite
+# 儿童作业闯关积分系统 V1.6
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+让作业变得有趣，让学习成为习惯
 
-Currently, two official plugins are available:
+## 产品简介
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+一款面向小学生的游戏化作业管理应用，通过番茄工作法、积分奖励、段位升级、成就系统等功能，帮助孩子培养专注力和自律性。
 
-## Expanding the ESLint configuration
+## 功能特性
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+### 学生端
+- 任务管理：创建、编辑、删除任务
+- 番茄钟：SVG 环形倒计时，后台持续计时
+- 积分系统：多种积分获取方式
+- 段位系统：5个段位等级
+- 成就系统：14个成就解锁
 
-- Configure the top-level `parserOptions` property like this:
+### 家长端
+- 孩子绑定与管理
+- 作业记录查看
+- 积分管理
+- 奖励配置
+- 专注报告
 
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+### 老师端
+- 班级管理
+- 作业发布
+- 数据统计
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+## 技术栈
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
+- React 18 + TypeScript
+- Vite
+- Tailwind CSS
 
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
-```
+## 部署信息
+
+### Vercel 部署
+- 生产环境：https://19fklpyuihrl.space.minimaxi.com
+
+### GitHub 仓库
+- https://github.com/zmy1006-sudo/homework-hero
+
+## 开发计划
+
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| Day 1-5 | 基础功能 | ✅ |
+| Day 6 | 成就系统 | ✅ |
+| Day 7-8 | 家长端 | ✅ |
+| Day 8 | 老师端 | ✅ |
+| Day 9-10 | 家长端完善 | ⏳ |
+| Day 11-13 | 社交功能 | ⏳ |
+| Day 14-15 | 老师端完善 | ⏳ |
+| Day 16-20 | 管理员后台 | ⏳ |
+| Day 21-24 | 测试上线 | ⏳ |
+
+## 版本
+
+- 当前版本：V1.6
+- 更新日期：2026-03-16
+
+## 需求文档
+
+- 开发需求清单：`/workspace/memory/V1.6-开发清单.md`
+- 需求原文：`/workspace/memory/V1.6-需求文档.md`
