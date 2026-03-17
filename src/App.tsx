@@ -19,7 +19,7 @@ interface HomeworkTask {
 
 interface Reward { id: number; name: string; points: number; icon: string; isCustom: boolean }
 interface Achievement { id: string; name: string; description: string; icon: string; condition: (stats: UserStats) => boolean; category: string }
-interface Record { id: number; type: string; title: string; detail: string; points?: number; timestamp: string }
+interface AppRecord { id: number; type: string; title: string; detail: string; points?: number; timestamp: string }
 interface UserStats { totalPomodoros: number; totalPoints: number; completedTasks: number; currentStreak: number; totalRewardsRedeemed: number; earlyCompletions: number; overtimeCompletions: number; perfectDays: number; longestStreak: number }
 interface Distraction { id: number; type: string; timestamp: number }
 
@@ -296,7 +296,7 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
   const [newRewardPoints, setNewRewardPoints] = useState(50)
   const [newRewardIcon, setNewRewardIcon] = useState('🎁')
   const [unlockedAchievements, setUnlockedAchievements] = useState<string[]>([])
-  const [records, setRecords] = useState<Record[]>([])
+  const [records, setRecords] = useState<AppRecord[]>([])
   const [activeTimer, setActiveTimer] = useState<HomeworkTask | null>(null)
 
   useEffect(() => {
@@ -324,7 +324,7 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
   }, [tasks, stars, userStats, rewards, unlockedAchievements, records])
 
   const addRecord = useCallback((type: string, title: string, detail: string, points?: number) => {
-    const newRecord: Record = { id: Date.now(), type, title, detail, points, timestamp: new Date().toISOString() }
+    const newRecord: AppRecord = { id: Date.now(), type, title, detail, points, timestamp: new Date().toISOString() }
     setRecords(prev => [newRecord, ...prev].slice(0, 100))
     saveData()
   }, [saveData])
