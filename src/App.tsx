@@ -33,12 +33,58 @@ interface Child {
   stats: UserStats
 }
 
+interface Assignment {
+  id: number
+  title: string
+  subject: string
+  description?: string
+  dueDate?: string
+  createdAt: string
+}
+
+interface AssignmentProgress {
+  assignmentId: number
+  status: 'pending' | 'submitted' | 'graded'
+  submittedAt?: string
+  remark?: string
+  photo?: string
+  grade?: number
+  pointsEarned?: number
+}
+
+interface ClassStudent {
+  id: string
+  nickname: string
+  grade?: string
+  stars: number
+  joinedAt: string
+}
+
+interface JoinRequest {
+  id: number
+  studentId: string
+  nickname: string
+  grade?: string
+  status: 'pending' | 'approved' | 'rejected'
+  requestedAt: string
+}
+
+interface Announcement {
+  id: number
+  title: string
+  content: string
+  createdAt: string
+}
+
 interface ClassInfo {
   id: string
   name: string
   code: string
   school?: string
-  students: string[]
+  students: ClassStudent[]
+  joinRequests: JoinRequest[]
+  assignments: Assignment[]
+  announcements: Announcement[]
 }
 
 const CHILDREN_KEY = 'homework-hero-children'
@@ -258,22 +304,26 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
   const [childName, setChildName] = useState('')
   const [school, setSchool] = useState('')
   const [className, setClassName] = useState('')
+  const [classCode, setClassCode] = useState('')
   const [showRoleSelect, setShowRoleSelect] = useState(true)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (role === 'child' && !nickname.trim()) return
+    if (role === 'child' && (!nickname.trim() || !classCode.trim())) return
     if (role === 'parent' && !childName.trim()) return
     if (role === 'teacher' && (!nickname.trim() || !school.trim() || !className.trim())) return
 
+    const userId = phone.trim() ? `child-${phone.trim()}` : `child-${nickname.trim()}`
+
     const user: UserInfo = {
-      id: Date.now().toString(),
+      id: userId,
       nickname: role === 'child' ? nickname : role === 'parent' ? `${childName}的家长` : nickname,
       role,
       phone,
       grade: role === 'child' ? grade : undefined,
       school: role === 'teacher' ? school : undefined,
-      className: role === 'teacher' ? className : undefined
+      className: role === 'teacher' ? className : undefined,
+      classCode: role === 'child' ? classCode : undefined
     }
 
     if (role === 'teacher') {
@@ -282,9 +332,40 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
         name: className,
         school,
         code: Math.random().toString(36).substring(2, 8).toUpperCase(),
-        students: []
+        students: [],
+        joinRequests: [],
+        assignments: [],
+        announcements: []
       }
       localStorage.setItem(CLASS_KEY, JSON.stringify(newClass))
+    }
+
+    if (role === 'child') {
+      const savedClass = localStorage.getItem(CLASS_KEY)
+      if (!savedClass) {
+        alert('当前没有可加入的班级，请让老师先创建班级编码。')
+        return
+      }
+      const classInfo: ClassInfo = JSON.parse(savedClass)
+      if (classInfo.code !== classCode.trim()) {
+        alert('班级码不正确，请检查后重试。')
+        return
+      }
+
+      const existingRequest = classInfo.joinRequests.find(r => r.studentId === userId)
+      const alreadyInClass = classInfo.students.some(s => s.id === userId)
+
+      if (!alreadyInClass && !existingRequest) {
+        classInfo.joinRequests.push({
+          id: Date.now(),
+          studentId: userId,
+          nickname,
+          grade,
+          status: 'pending',
+          requestedAt: new Date().toISOString()
+        })
+        localStorage.setItem(CLASS_KEY, JSON.stringify(classInfo))
+      }
     }
 
     onLogin(user)
@@ -300,7 +381,7 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
     return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><div className="text-center mb-8"><div className="w-20 h-20 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><span className="text-xl">🦸</span></div><h1 className="text-2xl font-black bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] bg-clip-text text-transparent">作业闯关小英雄</h1><p className="text-gray-500 mt-2">让学习更有趣</p></div><div className="space-y-3">{roles.map((r) => (<button key={r.id} onClick={() => { setRole(r.id); setShowRoleSelect(false); }} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r from-[#FFE66D]/20 to-[#FF6B6B]/10 hover:from-[#FFE66D]/40 hover:to-[#FF6B6B]/20 transition-all border-2 border-transparent hover:border-[#FF6B6B]"><span className="text-3xl">{r.icon}</span><div className="text-left"><div className="font-bold text-gray-800">{r.title}</div><div className="text-xs text-gray-500">{r.desc}</div></div><ChevronRight className="w-5 h-5 text-gray-400 ml-auto" /></button>))}</div></div></div>)
   }
 
-  return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><button onClick={() => setShowRoleSelect(true)} className="flex items-center gap-1 text-gray-500 mb-4"><ChevronRight className="w-4 h-4 rotate-180" /> 返回</button><div className="text-center mb-6"><div className="w-16 h-16 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg"><span className="text-2xl">{roles.find(r => r.id === role)?.icon}</span></div><h2 className="text-xl font-bold text-gray-800">{roles.find(r => r.id === role)?.title}登录</h2></div><form onSubmit={handleSubmit} className="space-y-4">{role === 'child' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">昵称</label><input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="请输入昵称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">年级</label><select value={grade} onChange={(e) => setGrade(e.target.value)} className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none"><option value="">选择年级</option><option value="一年级">一年级</option><option value="二年级">二年级</option><option value="三年级">三年级</option><option value="四年级">四年级</option><option value="五年级">五年级</option><option value="六年级">六年级</option><option value="初一">初一</option><option value="初二">初二</option><option value="初三">初三</option></select></div></>)}{role === 'parent' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">绑定孩子昵称</label><input type="text" value={childName} onChange={(e) => setChildName(e.target.value)} placeholder="请输入孩子昵称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}{role === 'teacher' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">学校</label><input type="text" value={school} onChange={(e) => setSchool(e.target.value)} placeholder="请输入学校名称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">班级</label><input type="text" value={className} onChange={(e) => setClassName(e.target.value)} placeholder="请输入班级名称（如：三年级一班）" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}<button type="submit" className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold text-lg shadow-lg hover:scale-[1.02] transition-transform">登录 ✨</button></form></div></div>)
+  return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><button onClick={() => setShowRoleSelect(true)} className="flex items-center gap-1 text-gray-500 mb-4"><ChevronRight className="w-4 h-4 rotate-180" /> 返回</button><div className="text-center mb-6"><div className="w-16 h-16 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg"><span className="text-2xl">{roles.find(r => r.id === role)?.icon}</span></div><h2 className="text-xl font-bold text-gray-800">{roles.find(r => r.id === role)?.title}登录</h2></div><form onSubmit={handleSubmit} className="space-y-4">{role === 'child' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">昵称</label><input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="请输入昵称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">年级</label><select value={grade} onChange={(e) => setGrade(e.target.value)} className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none"><option value="">选择年级</option><option value="一年级">一年级</option><option value="二年级">二年级</option><option value="三年级">三年级</option><option value="四年级">四年级</option><option value="五年级">五年级</option><option value="六年级">六年级</option><option value="初一">初一</option><option value="初二">初二</option><option value="初三">初三</option></select></div><div><label className="block text-sm font-medium text-gray-700 mb-2">班级码</label><input type="text" value={classCode} onChange={(e) => setClassCode(e.target.value)} placeholder="请输入班级码" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}{role === 'parent' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">绑定孩子昵称</label><input type="text" value={childName} onChange={(e) => setChildName(e.target.value)} placeholder="请输入孩子昵称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}{role === 'teacher' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">学校</label><input type="text" value={school} onChange={(e) => setSchool(e.target.value)} placeholder="请输入学校名称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">班级</label><input type="text" value={className} onChange={(e) => setClassName(e.target.value)} placeholder="请输入班级名称（如：三年级一班）" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}<button type="submit" className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold text-lg shadow-lg hover:scale-[1.02] transition-transform">登录 ✨</button></form></div></div>)
 }
 
 function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) {
@@ -320,7 +401,15 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
   const [newRewardIcon, setNewRewardIcon] = useState('🎁')
   const [unlockedAchievements, setUnlockedAchievements] = useState<string[]>([])
   const [records, setRecords] = useState<AppRecord[]>([])
+  const [classInfo, setClassInfo] = useState<ClassInfo | null>(null)
+  const [joinStatus, setJoinStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>('none')
+  const [joinCode, setJoinCode] = useState(user.classCode || '')
+  const [assignmentProgress, setAssignmentProgress] = useState<AssignmentProgress[]>([])
   const [activeTimer, setActiveTimer] = useState<HomeworkTask | null>(null)
+  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null)
+  const [showSubmitModal, setShowSubmitModal] = useState(false)
+  const [submitRemark, setSubmitRemark] = useState('')
+  const [submitPhoto, setSubmitPhoto] = useState('')
 
   useEffect(() => {
     const savedStars = localStorage.getItem(STARS_KEY)
@@ -335,7 +424,30 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
     if (savedAchievements) setUnlockedAchievements(JSON.parse(savedAchievements))
     const savedRecords = localStorage.getItem(RECORDS_KEY)
     if (savedRecords) setRecords(JSON.parse(savedRecords))
-  }, [])
+
+    const savedClass = localStorage.getItem(CLASS_KEY)
+    if (savedClass) {
+      const parsed = JSON.parse(savedClass) as ClassInfo
+      const normalized: ClassInfo = {
+        ...parsed,
+        students: parsed.students || [],
+        joinRequests: parsed.joinRequests || [],
+        assignments: parsed.assignments || [],
+        announcements: parsed.announcements || []
+      }
+      setClassInfo(normalized)
+      setJoinCode(normalized.code)
+      const isMember = normalized.students.some(s => s.id === user.id)
+      const request = normalized.joinRequests.find(r => r.studentId === user.id)
+      if (isMember) setJoinStatus('approved')
+      else if (request?.status === 'pending') setJoinStatus('pending')
+      else if (request?.status === 'rejected') setJoinStatus('rejected')
+      else setJoinStatus('none')
+    }
+
+    const savedProgress = localStorage.getItem(`homework-hero-assignment-progress-${user.id}`)
+    if (savedProgress) setAssignmentProgress(JSON.parse(savedProgress))
+  }, [user.id])
 
   const saveData = useCallback(() => {
     localStorage.setItem(TASKS_KEY, JSON.stringify(tasks))
@@ -345,6 +457,32 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
     localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(unlockedAchievements))
     localStorage.setItem(RECORDS_KEY, JSON.stringify(records))
   }, [tasks, stars, userStats, rewards, unlockedAchievements, records])
+
+  const saveAssignmentProgress = useCallback(() => {
+    localStorage.setItem(`homework-hero-assignment-progress-${user.id}`, JSON.stringify(assignmentProgress))
+  }, [assignmentProgress, user.id])
+
+  const getAssignmentProgress = (assignmentId: number) => assignmentProgress.find(p => p.assignmentId === assignmentId)
+
+  const submitAssignment = (assignment: Assignment, remark: string, photo?: string) => {
+    const points = 10
+    const newProgress: AssignmentProgress = {
+      assignmentId: assignment.id,
+      status: 'submitted',
+      submittedAt: new Date().toISOString(),
+      remark: remark.trim(),
+      photo,
+      grade: undefined,
+      pointsEarned: points
+    }
+    setAssignmentProgress(prev => [newProgress, ...prev.filter(p => p.assignmentId !== assignment.id)])
+    setStars(s => s + points)
+    setUserStats(prev => ({ ...prev, totalPoints: prev.totalPoints + points, completedTasks: prev.completedTasks + 1 }))
+    addRecord('assignment_submitted', '✅ 提交作业', `提交 ${assignment.title} +${points} 积分`, points)
+    checkAchievements()
+    saveAssignmentProgress()
+    saveData()
+  }
 
   const addRecord = useCallback((type: string, title: string, detail: string, points?: number) => {
     const newRecord: AppRecord = { id: Date.now(), type, title, detail, points, timestamp: new Date().toISOString() }
@@ -405,6 +543,32 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
 
   const handleTimerComplete = (points: number, isOvertime: boolean, distractions: Distraction[]) => {
     if (!activeTimer) return
+
+    // If this timer is tied to a class assignment, record accordingly
+    const assignment = classInfo?.assignments?.find(a => a.id === activeTimer.id)
+    if (assignment) {
+      const existingProgress = getAssignmentProgress(assignment.id)
+      const earned = isOvertime ? Math.max(0, points) : points
+      const updatedProgress: AssignmentProgress = {
+        assignmentId: assignment.id,
+        status: 'submitted',
+        submittedAt: new Date().toISOString(),
+        remark: existingProgress?.remark || '',
+        photo: existingProgress?.photo,
+        pointsEarned: earned
+      }
+      setAssignmentProgress(prev => [updatedProgress, ...prev.filter(p => p.assignmentId !== assignment.id)])
+      saveAssignmentProgress()
+
+      setStars(s => s + earned)
+      setUserStats(prev => ({ ...prev, totalPomodoros: prev.totalPomodoros + 1, totalPoints: prev.totalPoints + earned, earlyCompletions: !isOvertime ? prev.earlyCompletions + 1 : prev.earlyCompletions, overtimeCompletions: isOvertime ? prev.overtimeCompletions + 1 : prev.overtimeCompletions }))
+      addRecord('assignment_pomodoro', '🍅 作业番茄完成', `完成 ${assignment.title}，获得 ${earned} 积分`, earned)
+      checkAchievements()
+      saveData()
+      setActiveTimer(null)
+      return
+    }
+
     setTasks(tasks.map(t => t.id === activeTimer.id ? { ...t, pomodorosCompleted: t.pomodorosCompleted + 1 } : t))
     setStars(s => s + points)
     setUserStats(prev => ({ ...prev, totalPomodoros: prev.totalPomodoros + 1, totalPoints: prev.totalPoints + points, earlyCompletions: !isOvertime ? prev.earlyCompletions + 1 : prev.earlyCompletions, overtimeCompletions: isOvertime ? prev.overtimeCompletions + 1 : prev.overtimeCompletions }))
@@ -413,6 +577,20 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
     checkAchievements()
     saveData()
     setActiveTimer(null)
+  }
+
+  const startPomodoroForAssignment = (assignment: Assignment) => {
+    setSelectedAssignment(assignment)
+    setActiveTimer({
+      id: assignment.id,
+      name: assignment.title,
+      subject: assignment.subject,
+      completed: false,
+      cancelled: false,
+      pomodorosCompleted: 0,
+      plannedDuration: 25,
+      status: 'in_progress'
+    })
   }
 
   const formatDate = (dateStr: string) => { const date = new Date(dateStr); const now = new Date(); const diff = now.getTime() - date.getTime(); const m = Math.floor(diff / 60000); const h = Math.floor(diff / 3600000); const d = Math.floor(diff / 86400000); if (m < 1) return '刚刚'; if (m < 60) return `${m}分钟前`; if (h < 24) return `${h}小时前`; if (d < 7) return `${d}天前`; return date.toLocaleDateString('zh-CN') }
@@ -479,6 +657,75 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
         <button onClick={() => setCurrentSection('achievements')} className="flex flex-col items-center gap-1 p-2 rounded-xl bg-gradient-to-r from-[#A8E6CF] to-[#4ECDC4] text-white shadow-md hover:scale-105 relative"><Trophy className="w-5 h-5" /><span className="text-[10px] font-medium">成就</span>{unlockedAchievements.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-white text-[#FF6B6B] text-xs rounded-full font-bold">{unlockedAchievements.length}</span>}</button>
         <button onClick={() => setCurrentSection('records')} className="flex flex-col items-center gap-1 p-2 rounded-xl bg-gradient-to-r from-[#4ECDC4] to-[#A8E6CF] text-white shadow-md hover:scale-105"><History className="w-5 h-5" /><span className="text-[10px] font-medium">记录</span></button>
       </div>
+
+      {classInfo ? (
+        <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-4 shadow-lg border-2 border-white">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-[#4ECDC4]" />
+              <h3 className="font-bold text-gray-700">班级作业</h3>
+            </div>
+            {joinStatus === 'pending' && <span className="text-xs text-orange-500">等待老师审批中</span>}
+            {joinStatus === 'rejected' && <span className="text-xs text-red-500">已被拒绝，请联系老师</span>}
+          </div>
+
+          {joinStatus === 'approved' ? (
+            classInfo.assignments.length === 0 ? (
+              <p className="text-sm text-gray-500">老师还未发布作业，敬请期待~</p>
+            ) : (
+              <div className="space-y-3">
+                {classInfo.assignments.map(assign => {
+                  const progress = getAssignmentProgress(assign.id)
+                  const statusTag = progress?.status === 'submitted' ? '已提交' : '待完成'
+                  return (
+                    <div key={assign.id} className="border rounded-2xl p-3 bg-white">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="font-medium text-gray-800 truncate">{assign.title}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">{assign.subject} {assign.dueDate ? `· 截止 ${assign.dueDate}` : ''}</div>
+                        </div>
+                        <div className="text-xs text-gray-500 px-2 py-1 rounded-full bg-gray-100">{statusTag}</div>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2">
+                        <button onClick={() => startPomodoroForAssignment(assign)} className="px-3 py-1 rounded-full bg-[#4ECDC4] text-white text-xs">番茄钟</button>
+                        <button onClick={() => { setSelectedAssignment(assign); setShowSubmitModal(true); }} className="px-3 py-1 rounded-full bg-[#FF6B6B] text-white text-xs">打卡提交</button>
+                        {progress?.pointsEarned != null && <span className="text-xs text-green-600">+{progress.pointsEarned} 积分</span>}
+                      </div>
+                      {progress?.remark && <div className="mt-2 text-xs text-gray-600">备注：{progress.remark}</div>}
+                      {progress?.photo && <img src={progress.photo} alt="提交" className="mt-2 w-full h-24 object-cover rounded-xl" />}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          ) : (
+            <div className="text-sm text-gray-500">
+              {joinStatus === 'none' ? (
+                <div className="flex flex-col sm:flex-row gap-2 items-center">
+                  <span>请输入班级码加入班级查看作业：</span>
+                  <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)} placeholder="班级码" className="px-3 py-2 border-2 border-[#FFE66D] rounded-xl text-sm" />
+                  <button onClick={() => {
+                    const saved = localStorage.getItem(CLASS_KEY)
+                    if (!saved) { alert('尚未创建班级，请联系老师'); return }
+                    const info = JSON.parse(saved) as ClassInfo
+                    if (info.code !== joinCode.trim()) { alert('班级码不正确'); return }
+                    if (info.students.some(s => s.id === user.id)) { setJoinStatus('approved'); return }
+                    const existing = info.joinRequests.find(r => r.studentId === user.id)
+                    if (!existing) {
+                      info.joinRequests.push({ id: Date.now(), studentId: user.id, nickname: user.nickname, grade: user.grade, status: 'pending', requestedAt: new Date().toISOString() })
+                      localStorage.setItem(CLASS_KEY, JSON.stringify(info))
+                    }
+                    setJoinStatus('pending')
+                    setClassInfo(info)
+                  }} className="px-3 py-2 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl text-sm">申请加入</button>
+                </div>
+              ) : (
+                <span>请等待老师审批加入班级。</span>
+              )}
+            </div>
+          )}
+        </div>
+      ) : null}
 
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -680,6 +927,43 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
             <input type="number" value={newRewardPoints} onChange={(e) => setNewRewardPoints(Number(e.target.value))} placeholder="所需积分" className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-3" />
             <div className="flex gap-2 mb-4"><input type="text" value={newRewardIcon} onChange={(e) => setNewRewardIcon(e.target.value)} placeholder="图标" className="w-16 px-3 py-2 border-2 border-[#FFE66D] rounded-xl text-center" /><span className="text-2xl self-center">{newRewardIcon}</span></div>
             <div className="flex gap-2"><button onClick={addReward} className="flex-1 py-2 bg-[#FF6B6B] text-white rounded-xl font-medium">添加</button><button onClick={() => setShowAddReward(false)} className="px-4 py-2 bg-gray-200 text-gray-600 rounded-xl font-medium">取消</button></div>
+          </div>
+        </div>
+      )}
+
+      {showSubmitModal && selectedAssignment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full">
+            <h3 className="text-lg font-bold mb-4">提交作业</h3>
+            <div className="mb-3">
+              <div className="text-sm text-gray-600 mb-1">{selectedAssignment.title}</div>
+              <textarea value={submitRemark} onChange={(e) => setSubmitRemark(e.target.value)} placeholder="填写完成说明（可选）" className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-3" rows={3} />
+              <div className="text-sm text-gray-600 mb-1">上传照片（可选）</div>
+              <input type="file" accept="image/*" onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                const reader = new FileReader()
+                reader.onload = () => {
+                  setSubmitPhoto(reader.result as string)
+                }
+                reader.readAsDataURL(file)
+              }} className="w-full" />
+              {submitPhoto && <img src={submitPhoto} alt="提交图片" className="mt-3 w-full h-32 object-cover rounded-xl" />}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => {
+                if (!selectedAssignment) return
+                submitAssignment(selectedAssignment, submitRemark, submitPhoto)
+                setShowSubmitModal(false)
+                setSubmitRemark('')
+                setSubmitPhoto('')
+              }} className="flex-1 py-2 bg-[#4ECDC4] text-white rounded-xl font-medium">提交</button>
+              <button onClick={() => {
+                setShowSubmitModal(false)
+                setSubmitRemark('')
+                setSubmitPhoto('')
+              }} className="px-4 py-2 bg-gray-200 text-gray-600 rounded-xl font-medium">取消</button>
+            </div>
           </div>
         </div>
       )}
@@ -989,14 +1273,24 @@ function TeacherHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
   const [homeworkName, setHomeworkName] = useState('')
   const [homeworkSubject, setHomeworkSubject] = useState('数学')
   const [homeworkDesc, setHomeworkDesc] = useState('')
+  const [homeworkDue, setHomeworkDue] = useState('')
+  const [announcementTitle, setAnnouncementTitle] = useState('')
+  const [announcementContent, setAnnouncementContent] = useState('')
 
   useEffect(() => {
     const savedClass = localStorage.getItem(CLASS_KEY)
     if (savedClass) {
       const parsed = JSON.parse(savedClass) as ClassInfo
-      setClassInfo(parsed)
-      setNewClassSchool(parsed.school || user.school || '')
-      setNewClassName(parsed.name || user.className || '')
+      const normalized: ClassInfo = {
+        ...parsed,
+        students: parsed.students || [],
+        joinRequests: parsed.joinRequests || [],
+        assignments: parsed.assignments || [],
+        announcements: parsed.announcements || []
+      }
+      setClassInfo(normalized)
+      setNewClassSchool(normalized.school || user.school || '')
+      setNewClassName(normalized.name || user.className || '')
     }
   }, [user.school, user.className])
 
@@ -1007,7 +1301,10 @@ function TeacherHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
       name: newClassName,
       school: newClassSchool,
       code: Math.random().toString(36).substring(2, 8).toUpperCase(),
-      students: []
+      students: [],
+      joinRequests: [],
+      assignments: [],
+      announcements: []
     }
     setClassInfo(newClass)
     localStorage.setItem(CLASS_KEY, JSON.stringify(newClass))
@@ -1015,8 +1312,20 @@ function TeacherHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
 
   const publishHomework = () => {
     if (!homeworkName.trim() || !classInfo) return
+    const newAssignment: Assignment = {
+      id: Date.now(),
+      title: homeworkName.trim(),
+      subject: homeworkSubject,
+      description: homeworkDesc.trim(),
+      dueDate: homeworkDue || undefined,
+      createdAt: new Date().toISOString()
+    }
+    const updatedClass = { ...classInfo, assignments: [newAssignment, ...(classInfo.assignments || [])] }
+    setClassInfo(updatedClass)
+    localStorage.setItem(CLASS_KEY, JSON.stringify(updatedClass))
+
     alert(`作业 "${homeworkName}" 已发布到班级 ${classInfo.name}！`)
-    setHomeworkName(''); setHomeworkDesc('')
+    setHomeworkName(''); setHomeworkDesc(''); setHomeworkDue('')
   }
 
   return (
@@ -1059,11 +1368,41 @@ function TeacherHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
               </div>
             </div>
 
+            {classInfo.joinRequests && classInfo.joinRequests.some(r => r.status === 'pending') && (
+              <div className="bg-white rounded-2xl p-4 shadow-lg">
+                <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2"><Users className="w-5 h-5 text-[#FF6B6B]" />入班申请</h3>
+                {classInfo.joinRequests.filter(r => r.status === 'pending').map(r => (
+                  <div key={r.id} className="flex items-center justify-between border-b last:border-b-0 border-gray-200 py-2">
+                    <div>
+                      <div className="font-medium">{r.nickname}</div>
+                      <div className="text-xs text-gray-500">{r.grade || '暂无年级'} · {new Date(r.requestedAt).toLocaleString()}</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => {
+                        const updated = { ...classInfo } as ClassInfo
+                        updated.joinRequests = updated.joinRequests.map(j => j.id === r.id ? { ...j, status: 'approved' } : j)
+                        updated.students = [...updated.students, { id: r.studentId, nickname: r.nickname, grade: r.grade, stars: 0, joinedAt: new Date().toISOString() }]
+                        setClassInfo(updated)
+                        localStorage.setItem(CLASS_KEY, JSON.stringify(updated))
+                      }} className="px-3 py-1 bg-[#4ECDC4] text-white rounded-full text-xs">通过</button>
+                      <button onClick={() => {
+                        const updated = { ...classInfo } as ClassInfo
+                        updated.joinRequests = updated.joinRequests.map(j => j.id === r.id ? { ...j, status: 'rejected' } : j)
+                        setClassInfo(updated)
+                        localStorage.setItem(CLASS_KEY, JSON.stringify(updated))
+                      }} className="px-3 py-1 bg-gray-200 text-gray-600 rounded-full text-xs">拒绝</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="bg-white rounded-2xl p-4 shadow-lg">
               <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><BookMarked className="w-5 h-5 text-[#FF6B6B]" />发布作业</h3>
               <input type="text" value={homeworkName} onChange={(e) => setHomeworkName(e.target.value)} placeholder="作业标题" className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-3" />
               <div className="flex gap-2 mb-3 overflow-x-auto">{SUBJECTS.map(s => (<button key={s.name} onClick={() => setHomeworkSubject(s.name)} className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${homeworkSubject === s.name ? s.color + ' ring-2 ring-[#FF6B6B]' : 'bg-gray-100'}`}>{s.emoji} {s.name}</button>))}</div>
-              <textarea value={homeworkDesc} onChange={(e) => setHomeworkDesc(e.target.value)} placeholder="作业描述（可选）" className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-4" rows={3} />
+              <textarea value={homeworkDesc} onChange={(e) => setHomeworkDesc(e.target.value)} placeholder="作业描述（可选）" className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-3" rows={3} />
+              <input type="date" value={homeworkDue} onChange={(e) => setHomeworkDue(e.target.value)} className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-4" />
               <button onClick={publishHomework} disabled={!homeworkName.trim()} className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold disabled:opacity-50">发布作业</button>
             </div>
 
@@ -1071,9 +1410,62 @@ function TeacherHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
               <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-[#A8E6CF]" />数据统计</h3>
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-gray-50 p-3 rounded-xl"><div className="text-2xl font-bold text-[#FFE66D]">{classInfo.students.length}</div><div className="text-xs text-gray-500">学生数</div></div>
-                <div className="bg-gray-50 p-3 rounded-xl"><div className="text-2xl font-bold text-[#4ECDC4]">0</div><div className="text-xs text-gray-500">今日作业</div></div>
-                <div className="bg-gray-50 p-3 rounded-xl"><div className="text-2xl font-bold text-[#FF6B6B]">0</div><div className="text-xs text-gray-500">完成率</div></div>
-                <div className="bg-gray-50 p-3 rounded-xl"><div className="text-2xl font-bold text-[#A8E6CF]">0</div><div className="text-xs text-gray-500">平均积分</div></div>
+                <div className="bg-gray-50 p-3 rounded-xl"><div className="text-2xl font-bold text-[#4ECDC4]">{classInfo.assignments.length}</div><div className="text-xs text-gray-500">发布作业</div></div>
+                <div className="bg-gray-50 p-3 rounded-xl"><div className="text-2xl font-bold text-[#FF6B6B]">{classInfo.joinRequests.filter(r => r.status === 'pending').length}</div><div className="text-xs text-gray-500">待审批</div></div>
+                <div className="bg-gray-50 p-3 rounded-xl"><div className="text-2xl font-bold text-[#A8E6CF]">{classInfo.announcements.length}</div><div className="text-xs text-gray-500">公告数量</div></div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 shadow-lg">
+              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-[#4ECDC4]" />学生列表</h3>
+              {classInfo.students.length === 0 ? (
+                <p className="text-sm text-gray-500">当前暂无学生加入，学生通过班级码申请加入后会显示在这里。</p>
+              ) : (
+                <div className="space-y-2">
+                  {classInfo.students.map(s => (
+                    <div key={s.id} className="flex items-center justify-between border rounded-xl p-3">
+                      <div>
+                        <div className="font-medium">{s.nickname}</div>
+                        <div className="text-xs text-gray-500">{s.grade || '未知'} • {s.stars} 积分</div>
+                      </div>
+                      <button onClick={() => {
+                        const points = parseInt(prompt('输入要奖励的积分数量（正数为加分，负数为扣分）', '10') || '0', 10)
+                        if (!Number.isFinite(points)) return
+                        const updated = { ...classInfo }
+                        updated.students = updated.students.map(st => st.id === s.id ? { ...st, stars: Math.max(0, st.stars + points) } : st)
+                        setClassInfo(updated)
+                        localStorage.setItem(CLASS_KEY, JSON.stringify(updated))
+                      }} className="text-xs px-3 py-1 bg-[#4ECDC4] text-white rounded-full">奖励积分</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 shadow-lg">
+              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5 text-[#FFB347]" />班级公告</h3>
+              <div className="mb-3">
+                <input value={announcementTitle} onChange={(e) => setAnnouncementTitle(e.target.value)} placeholder="公告标题" className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-2" />
+                <textarea value={announcementContent} onChange={(e) => setAnnouncementContent(e.target.value)} placeholder="公告内容" className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-2" rows={3} />
+                <button onClick={() => {
+                  if (!announcementTitle.trim() || !announcementContent.trim() || !classInfo) return
+                  const updated = { ...classInfo }
+                  updated.announcements = [{ id: Date.now(), title: announcementTitle.trim(), content: announcementContent.trim(), createdAt: new Date().toISOString() }, ...(updated.announcements || [])]
+                  setClassInfo(updated)
+                  localStorage.setItem(CLASS_KEY, JSON.stringify(updated))
+                  setAnnouncementTitle(''); setAnnouncementContent('')
+                }} className="w-full py-2 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold">发布公告</button>
+              </div>
+              <div className="space-y-2">
+                {classInfo.announcements.length === 0 ? <p className="text-xs text-gray-500">暂无公告</p> : classInfo.announcements.map(a => (
+                  <div key={a.id} className="border p-3 rounded-xl">
+                    <div className="flex justify-between items-center">
+                      <div className="font-medium">{a.title}</div>
+                      <div className="text-xs text-gray-400">{new Date(a.createdAt).toLocaleString()}</div>
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1">{a.content}</div>
+                  </div>
+                ))}
               </div>
             </div>
           </>

@@ -8,6 +8,8 @@ export interface UserInfo {
   grade?: string
   school?: string
   className?: string
+  classCode?: string
+  classId?: string
 }
 
 const USER_KEY = 'homework-hero-user'
