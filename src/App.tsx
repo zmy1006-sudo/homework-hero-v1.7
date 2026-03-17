@@ -76,15 +76,26 @@ interface Announcement {
   createdAt: string
 }
 
+interface Submission {
+  assignmentId: number
+  studentId: string
+  studentName: string
+  submittedAt: string
+  remark?: string
+  photo?: string
+  pointsEarned?: number
+}
+
 interface ClassInfo {
   id: string
   name: string
   code: string
   school?: string
+  grade?: string
   students: ClassStudent[]
-  joinRequests: JoinRequest[]
   assignments: Assignment[]
   announcements: Announcement[]
+  submissions?: Submission[]
 }
 
 const CHILDREN_KEY = 'homework-hero-children'
@@ -311,13 +322,17 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
     e.preventDefault()
     if (role === 'child' && (!nickname.trim() || !classCode.trim())) return
     if (role === 'parent' && !childName.trim()) return
-    if (role === 'teacher' && (!nickname.trim() || !school.trim() || !className.trim())) return
+    if (role === 'teacher' && (!phone.trim() || !school.trim() || !className.trim())) return
 
-    const userId = phone.trim() ? `child-${phone.trim()}` : `child-${nickname.trim()}`
+    const userId = role === 'teacher'
+      ? `teacher-${phone.trim()}`
+      : phone.trim()
+        ? `child-${phone.trim()}`
+        : `child-${nickname.trim()}`
 
     const user: UserInfo = {
       id: userId,
-      nickname: role === 'child' ? nickname : role === 'parent' ? `${childName}的家长` : nickname,
+      nickname: role === 'child' ? nickname : role === 'parent' ? `${childName}的家长` : (nickname.trim() || `老师`),
       role,
       phone,
       grade: role === 'child' ? grade : undefined,
