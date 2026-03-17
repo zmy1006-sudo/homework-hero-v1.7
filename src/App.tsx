@@ -37,6 +37,7 @@ interface ClassInfo {
   id: string
   name: string
   code: string
+  school?: string
   students: string[]
 }
 
@@ -255,15 +256,37 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
   const [nickname, setNickname] = useState('')
   const [grade, setGrade] = useState('')
   const [childName, setChildName] = useState('')
-  const [classCode, setClassCode] = useState('')
+  const [school, setSchool] = useState('')
+  const [className, setClassName] = useState('')
   const [showRoleSelect, setShowRoleSelect] = useState(true)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (role === 'child' && !nickname.trim()) return
     if (role === 'parent' && !childName.trim()) return
-    if (role === 'teacher' && !classCode.trim()) return
-    const user: UserInfo = { id: Date.now().toString(), nickname: role === 'child' ? nickname : role === 'parent' ? `${childName}的家长` : '老师', role, phone, grade: role === 'child' ? grade : undefined }
+    if (role === 'teacher' && (!nickname.trim() || !school.trim() || !className.trim())) return
+
+    const user: UserInfo = {
+      id: Date.now().toString(),
+      nickname: role === 'child' ? nickname : role === 'parent' ? `${childName}的家长` : nickname,
+      role,
+      phone,
+      grade: role === 'child' ? grade : undefined,
+      school: role === 'teacher' ? school : undefined,
+      className: role === 'teacher' ? className : undefined
+    }
+
+    if (role === 'teacher') {
+      const newClass: ClassInfo = {
+        id: Date.now().toString(),
+        name: className,
+        school,
+        code: Math.random().toString(36).substring(2, 8).toUpperCase(),
+        students: []
+      }
+      localStorage.setItem(CLASS_KEY, JSON.stringify(newClass))
+    }
+
     onLogin(user)
   }
 
@@ -277,7 +300,7 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
     return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><div className="text-center mb-8"><div className="w-20 h-20 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><span className="text-xl">🦸</span></div><h1 className="text-2xl font-black bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] bg-clip-text text-transparent">作业闯关小英雄</h1><p className="text-gray-500 mt-2">让学习更有趣</p></div><div className="space-y-3">{roles.map((r) => (<button key={r.id} onClick={() => { setRole(r.id); setShowRoleSelect(false); }} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r from-[#FFE66D]/20 to-[#FF6B6B]/10 hover:from-[#FFE66D]/40 hover:to-[#FF6B6B]/20 transition-all border-2 border-transparent hover:border-[#FF6B6B]"><span className="text-3xl">{r.icon}</span><div className="text-left"><div className="font-bold text-gray-800">{r.title}</div><div className="text-xs text-gray-500">{r.desc}</div></div><ChevronRight className="w-5 h-5 text-gray-400 ml-auto" /></button>))}</div></div></div>)
   }
 
-  return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><button onClick={() => setShowRoleSelect(true)} className="flex items-center gap-1 text-gray-500 mb-4"><ChevronRight className="w-4 h-4 rotate-180" /> 返回</button><div className="text-center mb-6"><div className="w-16 h-16 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg"><span className="text-2xl">{roles.find(r => r.id === role)?.icon}</span></div><h2 className="text-xl font-bold text-gray-800">{roles.find(r => r.id === role)?.title}登录</h2></div><form onSubmit={handleSubmit} className="space-y-4">{role === 'child' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">昵称</label><input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="请输入昵称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">年级</label><select value={grade} onChange={(e) => setGrade(e.target.value)} className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none"><option value="">选择年级</option><option value="一年级">一年级</option><option value="二年级">二年级</option><option value="三年级">三年级</option><option value="四年级">四年级</option><option value="五年级">五年级</option><option value="六年级">六年级</option><option value="初一">初一</option><option value="初二">初二</option><option value="初三">初三</option></select></div></>)}{role === 'parent' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">绑定孩子昵称</label><input type="text" value={childName} onChange={(e) => setChildName(e.target.value)} placeholder="请输入孩子昵称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}{role === 'teacher' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">班级码</label><input type="text" value={classCode} onChange={(e) => setClassCode(e.target.value)} placeholder="请输入班级码" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}<button type="submit" className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold text-lg shadow-lg hover:scale-[1.02] transition-transform">登录 ✨</button></form></div></div>)
+  return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><button onClick={() => setShowRoleSelect(true)} className="flex items-center gap-1 text-gray-500 mb-4"><ChevronRight className="w-4 h-4 rotate-180" /> 返回</button><div className="text-center mb-6"><div className="w-16 h-16 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg"><span className="text-2xl">{roles.find(r => r.id === role)?.icon}</span></div><h2 className="text-xl font-bold text-gray-800">{roles.find(r => r.id === role)?.title}登录</h2></div><form onSubmit={handleSubmit} className="space-y-4">{role === 'child' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">昵称</label><input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="请输入昵称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">年级</label><select value={grade} onChange={(e) => setGrade(e.target.value)} className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none"><option value="">选择年级</option><option value="一年级">一年级</option><option value="二年级">二年级</option><option value="三年级">三年级</option><option value="四年级">四年级</option><option value="五年级">五年级</option><option value="六年级">六年级</option><option value="初一">初一</option><option value="初二">初二</option><option value="初三">初三</option></select></div></>)}{role === 'parent' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">绑定孩子昵称</label><input type="text" value={childName} onChange={(e) => setChildName(e.target.value)} placeholder="请输入孩子昵称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}{role === 'teacher' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">学校</label><input type="text" value={school} onChange={(e) => setSchool(e.target.value)} placeholder="请输入学校名称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">班级</label><input type="text" value={className} onChange={(e) => setClassName(e.target.value)} placeholder="请输入班级名称（如：三年级一班）" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}<button type="submit" className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold text-lg shadow-lg hover:scale-[1.02] transition-transform">登录 ✨</button></form></div></div>)
 }
 
 function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) {
@@ -961,18 +984,31 @@ function ParentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => vo
 
 function TeacherHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) {
   const [classInfo, setClassInfo] = useState<ClassInfo | null>(null)
+  const [newClassSchool, setNewClassSchool] = useState(user.school || '')
+  const [newClassName, setNewClassName] = useState(user.className || '')
   const [homeworkName, setHomeworkName] = useState('')
   const [homeworkSubject, setHomeworkSubject] = useState('数学')
   const [homeworkDesc, setHomeworkDesc] = useState('')
 
   useEffect(() => {
     const savedClass = localStorage.getItem(CLASS_KEY)
-    if (savedClass) setClassInfo(JSON.parse(savedClass))
-  }, [])
+    if (savedClass) {
+      const parsed = JSON.parse(savedClass) as ClassInfo
+      setClassInfo(parsed)
+      setNewClassSchool(parsed.school || user.school || '')
+      setNewClassName(parsed.name || user.className || '')
+    }
+  }, [user.school, user.className])
 
   const createClass = () => {
-    if (!classInfo) return
-    const newClass: ClassInfo = { id: Date.now().toString(), name: classInfo.name, code: Math.random().toString(36).substring(2, 8).toUpperCase(), students: [] }
+    if (!newClassSchool.trim() || !newClassName.trim()) return
+    const newClass: ClassInfo = {
+      id: Date.now().toString(),
+      name: newClassName,
+      school: newClassSchool,
+      code: Math.random().toString(36).substring(2, 8).toUpperCase(),
+      students: []
+    }
     setClassInfo(newClass)
     localStorage.setItem(CLASS_KEY, JSON.stringify(newClass))
   }
@@ -1002,15 +1038,19 @@ function TeacherHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
           <div className="bg-white rounded-2xl p-6 shadow-lg text-center">
             <div className="text-4xl mb-4">🏫</div>
             <h3 className="text-lg font-bold mb-2">创建班级</h3>
-            <p className="text-gray-500 text-sm mb-4">创建您的第一个班级，生成班级码让学生加入</p>
-            <input type="text" value={classInfo?.name || ''} onChange={(e) => setClassInfo({ id: '', name: e.target.value, code: '', students: [] })} placeholder="班级名称（如：三年级一班）" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl mb-4" />
-            <button onClick={createClass} disabled={!classInfo?.name} className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold disabled:opacity-50">创建班级</button>
+            <p className="text-gray-500 text-sm mb-4">输入学校和班级信息以完成注册</p>
+            <input type="text" value={newClassSchool} onChange={(e) => setNewClassSchool(e.target.value)} placeholder="学校名称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl mb-3" />
+            <input type="text" value={newClassName} onChange={(e) => setNewClassName(e.target.value)} placeholder="班级名称（如：三年级一班）" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl mb-4" />
+            <button onClick={createClass} disabled={!newClassSchool.trim() || !newClassName.trim()} className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold disabled:opacity-50">创建班级</button>
           </div>
         ) : (
           <>
             <div className="bg-white rounded-2xl p-4 shadow-lg">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-gray-800 flex items-center gap-2"><Users className="w-5 h-5 text-[#4ECDC4]" />{classInfo.name}</h3>
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="font-bold text-gray-800 flex items-center gap-2"><Users className="w-5 h-5 text-[#4ECDC4]" />{classInfo.name}</h3>
+                  <p className="text-xs text-gray-500">学校：{classInfo.school || user.school || '未知'}</p>
+                </div>
                 <div className="px-3 py-1 bg-[#FFE66D] rounded-full text-sm font-bold">{classInfo.code}</div>
               </div>
               <div className="text-center py-4">

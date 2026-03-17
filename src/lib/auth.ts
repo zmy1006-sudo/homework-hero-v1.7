@@ -6,6 +6,8 @@ export interface UserInfo {
   role: UserRole
   phone?: string
   grade?: string
+  school?: string
+  className?: string
 }
 
 const USER_KEY = 'homework-hero-user'
