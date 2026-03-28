@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Sparkles, BookOpen, Trophy, Play, Plus, Trash2, Star, LogOut, Gift, History, Award, Check, Edit2, Pause, RotateCcw, X, ChevronRight, Users, Clock, Calendar, TrendingUp, User, UserPlus, BarChart3, BookMarked, Timer } from 'lucide-react'
+import { Sparkles, BookOpen, Trophy, Play, Plus, Trash2, Star, LogOut, Gift, History, Award, Check, Edit2, Pause, RotateCcw, X, ChevronRight, Users, Clock, Calendar, TrendingUp, User, UserPlus, BarChart3, BookMarked, Timer, Bell, Lock, KeyRound } from 'lucide-react'
 import { getCurrentUser, logout, UserInfo } from './lib/auth'
 import PomodoroTimerPage from './PomodoroTimerPage'
+import { NotificationProvider, useNotifications } from './context/NotificationContext'
+import NotificationsPage from './pages/NotificationsPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ChangePasswordPage from './pages/ChangePasswordPage'
+import { registerParentAccount } from './lib/parentAccounts'
 import './App.css'
 
 // Types
@@ -19,7 +24,7 @@ interface HomeworkTask {
 
 interface Reward { id: number; name: string; points: number; icon: string; isCustom: boolean }
 interface Achievement { id: string; name: string; description: string; icon: string; condition: (stats: UserStats) => boolean; category: string }
-interface AppRecord { id: number; type: string; title: string; detail: string; points?: number; timestamp: string }
+interface Record { id: number; type: string; title: string; detail: string; points?: number; timestamp: string }
 interface UserStats { totalPomodoros: number; totalPoints: number; completedTasks: number; currentStreak: number; totalRewardsRedeemed: number; earlyCompletions: number; overtimeCompletions: number; perfectDays: number; longestStreak: number }
 interface Distraction { id: number; type: string; timestamp: number }
 
@@ -33,229 +38,23 @@ interface Child {
   stats: UserStats
 }
 
-interface Assignment {
-  id: number
-  title: string
-  subject: string
-  description?: string
-  dueDate?: string
-  createdAt: string
-}
-
-interface AssignmentProgress {
-  assignmentId: number
-  status: 'pending' | 'submitted' | 'graded'
-  submittedAt?: string
-  remark?: string
-  photo?: string
-  grade?: number
-  pointsEarned?: number
-}
-
-interface ClassStudent {
-  id: string
-  nickname: string
-  grade?: string
-  stars: number
-  joinedAt: string
-}
-
-interface JoinRequest {
-  id: number
-  studentId: string
-  nickname: string
-  grade?: string
-  status: 'pending' | 'approved' | 'rejected'
-  requestedAt: string
-}
-
-interface Announcement {
-  id: number
-  title: string
-  content: string
-  createdAt: string
-}
-
-interface Submission {
-  assignmentId: number
-  studentId: string
-  studentName: string
-  submittedAt: string
-  remark?: string
-  photo?: string
-  pointsEarned?: number
-}
-
 interface ClassInfo {
   id: string
   name: string
   code: string
-  school?: string
-  grade?: string
-  students: ClassStudent[]
-  assignments: Assignment[]
-  announcements: Announcement[]
-  submissions?: Submission[]
+  students: string[]
 }
 
 const CHILDREN_KEY = 'homework-hero-children'
 const CLASS_KEY = 'homework-hero-class'
 
 const SUBJECTS = [
-  { 
-    name: '语文', 
-    emoji: '📝', 
-    color: 'bg-yellow-100 text-yellow-700',
-    bgColor: 'bg-yellow-50',
-    borderColor: 'border-yellow-200',
-    accentColor: 'bg-yellow-500',
-    textColor: 'text-yellow-700',
-    lightBg: 'bg-yellow-100/50',
-    hoverBg: 'hover:bg-yellow-100/70'
-  },
-  { 
-    name: '数学', 
-    emoji: '🔢', 
-    color: 'bg-blue-100 text-blue-700',
-    bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-200',
-    accentColor: 'bg-blue-500',
-    textColor: 'text-blue-700',
-    lightBg: 'bg-blue-100/50',
-    hoverBg: 'hover:bg-blue-100/70'
-  },
-  { 
-    name: '英语', 
-    emoji: '📚', 
-    color: 'bg-purple-100 text-purple-700',
-    bgColor: 'bg-purple-50',
-    borderColor: 'border-purple-200',
-    accentColor: 'bg-purple-500',
-    textColor: 'text-purple-700',
-    lightBg: 'bg-purple-100/50',
-    hoverBg: 'hover:bg-purple-100/70'
-  },
-  { 
-    name: '科学', 
-    emoji: '🔬', 
-    color: 'bg-green-100 text-green-700',
-    bgColor: 'bg-green-50',
-    borderColor: 'border-green-200',
-    accentColor: 'bg-green-500',
-    textColor: 'text-green-700',
-    lightBg: 'bg-green-100/50',
-    hoverBg: 'hover:bg-green-100/70'
-  },
-  { 
-    name: '历史', 
-    emoji: '🏛️', 
-    color: 'bg-orange-100 text-orange-700',
-    bgColor: 'bg-orange-50',
-    borderColor: 'border-orange-200',
-    accentColor: 'bg-orange-500',
-    textColor: 'text-orange-700',
-    lightBg: 'bg-orange-100/50',
-    hoverBg: 'hover:bg-orange-100/70'
-  },
-  { 
-    name: '地理', 
-    emoji: '🌍', 
-    color: 'bg-teal-100 text-teal-700',
-    bgColor: 'bg-teal-50',
-    borderColor: 'border-teal-200',
-    accentColor: 'bg-teal-500',
-    textColor: 'text-teal-700',
-    lightBg: 'bg-teal-100/50',
-    hoverBg: 'hover:bg-teal-100/70'
-  },
-  { 
-    name: '政治', 
-    emoji: '⚖️', 
-    color: 'bg-indigo-100 text-indigo-700',
-    bgColor: 'bg-indigo-50',
-    borderColor: 'border-indigo-200',
-    accentColor: 'bg-indigo-500',
-    textColor: 'text-indigo-700',
-    lightBg: 'bg-indigo-100/50',
-    hoverBg: 'hover:bg-indigo-100/70'
-  },
-  { 
-    name: '物理', 
-    emoji: '⚛️', 
-    color: 'bg-cyan-100 text-cyan-700',
-    bgColor: 'bg-cyan-50',
-    borderColor: 'border-cyan-200',
-    accentColor: 'bg-cyan-500',
-    textColor: 'text-cyan-700',
-    lightBg: 'bg-cyan-100/50',
-    hoverBg: 'hover:bg-cyan-100/70'
-  },
-  { 
-    name: '化学', 
-    emoji: '🧪', 
-    color: 'bg-lime-100 text-lime-700',
-    bgColor: 'bg-lime-50',
-    borderColor: 'border-lime-200',
-    accentColor: 'bg-lime-500',
-    textColor: 'text-lime-700',
-    lightBg: 'bg-lime-100/50',
-    hoverBg: 'hover:bg-lime-100/70'
-  },
-  { 
-    name: '生物', 
-    emoji: '🧬', 
-    color: 'bg-emerald-100 text-emerald-700',
-    bgColor: 'bg-emerald-50',
-    borderColor: 'border-emerald-200',
-    accentColor: 'bg-emerald-500',
-    textColor: 'text-emerald-700',
-    lightBg: 'bg-emerald-100/50',
-    hoverBg: 'hover:bg-emerald-100/70'
-  },
-  { 
-    name: '美术', 
-    emoji: '🎨', 
-    color: 'bg-rose-100 text-rose-700',
-    bgColor: 'bg-rose-50',
-    borderColor: 'border-rose-200',
-    accentColor: 'bg-rose-500',
-    textColor: 'text-rose-700',
-    lightBg: 'bg-rose-100/50',
-    hoverBg: 'hover:bg-rose-100/70'
-  },
-  { 
-    name: '音乐', 
-    emoji: '🎵', 
-    color: 'bg-violet-100 text-violet-700',
-    bgColor: 'bg-violet-50',
-    borderColor: 'border-violet-200',
-    accentColor: 'bg-violet-500',
-    textColor: 'text-violet-700',
-    lightBg: 'bg-violet-100/50',
-    hoverBg: 'hover:bg-violet-100/70'
-  },
-  { 
-    name: '体育', 
-    emoji: '⚽', 
-    color: 'bg-red-100 text-red-700',
-    bgColor: 'bg-red-50',
-    borderColor: 'border-red-200',
-    accentColor: 'bg-red-500',
-    textColor: 'text-red-700',
-    lightBg: 'bg-red-100/50',
-    hoverBg: 'hover:bg-red-100/70'
-  },
-  { 
-    name: '其他', 
-    emoji: '⭐', 
-    color: 'bg-pink-100 text-pink-700',
-    bgColor: 'bg-pink-50',
-    borderColor: 'border-pink-200',
-    accentColor: 'bg-pink-500',
-    textColor: 'text-pink-700',
-    lightBg: 'bg-pink-100/50',
-    hoverBg: 'hover:bg-pink-100/70'
-  }
+  { name: '语文', emoji: '📝', color: 'bg-yellow-100 text-yellow-700' },
+  { name: '数学', emoji: '🔢', color: 'bg-blue-100 text-blue-700' },
+  { name: '英语', emoji: '📚', color: 'bg-purple-100 text-purple-700' },
+  { name: '科学', emoji: '🔬', color: 'bg-green-100 text-green-700' },
+  { name: '历史', emoji: '🏛️', color: 'bg-orange-100 text-orange-700' },
+  { name: '其他', emoji: '⭐', color: 'bg-pink-100 text-pink-700' }
 ]
 
 const DISTRACTIONS = [
@@ -307,54 +106,21 @@ const REWARDS_KEY = 'homework-hero-rewards'
 
 function getCurrentRank(points: number): typeof RANKS[0] { return RANKS.find(r => points >= r.minPoints && points < r.maxPoints) || RANKS[0] }
 
-function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
+function LoginPage({ onLogin, onForgot }: { onLogin: (user: UserInfo) => void; onForgot: () => void }) {
   const [role, setRole] = useState<'child' | 'parent' | 'teacher'>('child')
   const [phone, setPhone] = useState('')
   const [nickname, setNickname] = useState('')
   const [grade, setGrade] = useState('')
   const [childName, setChildName] = useState('')
-  const [school, setSchool] = useState('南京师范大学苏州实验学校')
-  const [className, setClassName] = useState('')
   const [classCode, setClassCode] = useState('')
   const [showRoleSelect, setShowRoleSelect] = useState(true)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (role === 'child' && (!nickname.trim() || !school.trim() || !grade)) return
+    if (role === 'child' && !nickname.trim()) return
     if (role === 'parent' && !childName.trim()) return
-    if (role === 'teacher' && (!phone.trim() || !school.trim() || !className.trim())) return
-
-    const userId = role === 'teacher'
-      ? `teacher-${phone.trim()}`
-      : phone.trim()
-        ? `child-${phone.trim()}`
-        : `child-${nickname.trim()}`
-
-    const user: UserInfo = {
-      id: userId,
-      nickname: role === 'child' ? nickname : role === 'parent' ? `${childName}的家长` : (nickname.trim() || `老师`),
-      role,
-      phone,
-      grade: role === 'child' ? grade : undefined,
-      school: school,
-      className: role === 'teacher' ? className : undefined,
-      classCode: role === 'child' ? undefined : undefined
-    }
-
-    if (role === 'teacher') {
-      const newClass: ClassInfo = {
-        id: Date.now().toString(),
-        name: className,
-        school,
-        code: Math.random().toString(36).substring(2, 8).toUpperCase(),
-        students: [],
-        assignments: [],
-        announcements: [],
-        submissions: []
-      }
-      localStorage.setItem(CLASS_KEY, JSON.stringify(newClass))
-    }
-
+    if (role === 'teacher' && !classCode.trim()) return
+    const user: UserInfo = { id: Date.now().toString(), nickname: role === 'child' ? nickname : role === 'parent' ? `${childName}的家长` : '老师', role, phone, grade: role === 'child' ? grade : undefined }
     onLogin(user)
   }
 
@@ -368,7 +134,7 @@ function LoginPage({ onLogin }: { onLogin: (user: UserInfo) => void }) {
     return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><div className="text-center mb-8"><div className="w-20 h-20 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><span className="text-xl">🦸</span></div><h1 className="text-2xl font-black bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] bg-clip-text text-transparent">作业闯关小英雄</h1><p className="text-gray-500 mt-2">让学习更有趣</p></div><div className="space-y-3">{roles.map((r) => (<button key={r.id} onClick={() => { setRole(r.id); setShowRoleSelect(false); }} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r from-[#FFE66D]/20 to-[#FF6B6B]/10 hover:from-[#FFE66D]/40 hover:to-[#FF6B6B]/20 transition-all border-2 border-transparent hover:border-[#FF6B6B]"><span className="text-3xl">{r.icon}</span><div className="text-left"><div className="font-bold text-gray-800">{r.title}</div><div className="text-xs text-gray-500">{r.desc}</div></div><ChevronRight className="w-5 h-5 text-gray-400 ml-auto" /></button>))}</div></div></div>)
   }
 
-  return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><button onClick={() => setShowRoleSelect(true)} className="flex items-center gap-1 text-gray-500 mb-4"><ChevronRight className="w-4 h-4 rotate-180" /> 返回</button><div className="text-center mb-6"><div className="w-16 h-16 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg"><span className="text-2xl">{roles.find(r => r.id === role)?.icon}</span></div><h2 className="text-xl font-bold text-gray-800">{roles.find(r => r.id === role)?.title}登录</h2></div><form onSubmit={handleSubmit} className="space-y-4">{role === 'child' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">昵称</label><input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="请输入昵称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">学校</label><input type="text" value={school} onChange={(e) => setSchool(e.target.value)} placeholder="请输入学校名称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">年级</label><select value={grade} onChange={(e) => setGrade(e.target.value)} className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none"><option value="">选择年级</option><option value="一年级">一年级</option><option value="二年级">二年级</option><option value="三年级">三年级</option><option value="四年级">四年级</option><option value="五年级">五年级</option><option value="六年级">六年级</option><option value="初一">初一</option><option value="初二">初二</option><option value="初三">初三</option></select></div></>)}{role === 'parent' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">绑定孩子昵称</label><input type="text" value={childName} onChange={(e) => setChildName(e.target.value)} placeholder="请输入孩子昵称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}{role === 'teacher' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">学校</label><input type="text" value={school} onChange={(e) => setSchool(e.target.value)} placeholder="请输入学校名称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">班级</label><input type="text" value={className} onChange={(e) => setClassName(e.target.value)} placeholder="请输入班级名称（如：三年级一班）" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}<button type="submit" className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold text-lg shadow-lg hover:scale-[1.02] transition-transform">登录 ✨</button></form></div></div>)
+  return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><button onClick={() => setShowRoleSelect(true)} className="flex items-center gap-1 text-gray-500 mb-4"><ChevronRight className="w-4 h-4 rotate-180" /> 返回</button><div className="text-center mb-6"><div className="w-16 h-16 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg"><span className="text-2xl">{roles.find(r => r.id === role)?.icon}</span></div><h2 className="text-xl font-bold text-gray-800">{roles.find(r => r.id === role)?.title}登录</h2></div><form onSubmit={handleSubmit} className="space-y-4">{role === 'child' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">昵称</label><input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="请输入昵称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">年级</label><select value={grade} onChange={(e) => setGrade(e.target.value)} className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none"><option value="">选择年级</option><option value="一年级">一年级</option><option value="二年级">二年级</option><option value="三年级">三年级</option><option value="四年级">四年级</option><option value="五年级">五年级</option><option value="六年级">六年级</option><option value="初一">初一</option><option value="初二">初二</option><option value="初三">初三</option></select></div></>)}{role === 'parent' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">绑定孩子昵称</label><input type="text" value={childName} onChange={(e) => setChildName(e.target.value)} placeholder="请输入孩子昵称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}{role === 'teacher' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">班级码</label><input type="text" value={classCode} onChange={(e) => setClassCode(e.target.value)} placeholder="请输入班级码" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}<button type="submit" className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold text-lg shadow-lg hover:scale-[1.02] transition-transform">登录 ✨</button>{role === 'parent' && (<button type="button" onClick={onForgot} className="w-full py-2 text-center text-sm text-[#4ECDC4] hover:text-[#3dbdb5] mt-1 flex items-center justify-center gap-1"><KeyRound className="w-4 h-4" />忘记密码？找回密码</button>)}</form></div></div>)
 }
 
 function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) {
@@ -387,15 +153,8 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
   const [newRewardPoints, setNewRewardPoints] = useState(50)
   const [newRewardIcon, setNewRewardIcon] = useState('🎁')
   const [unlockedAchievements, setUnlockedAchievements] = useState<string[]>([])
-  const [records, setRecords] = useState<AppRecord[]>([])
-  const [classInfo, setClassInfo] = useState<ClassInfo | null>(null)
-  const [joinStatus, setJoinStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>('none')
-  const [assignmentProgress, setAssignmentProgress] = useState<AssignmentProgress[]>([])
+  const [records, setRecords] = useState<Record[]>([])
   const [activeTimer, setActiveTimer] = useState<HomeworkTask | null>(null)
-  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null)
-  const [showSubmitModal, setShowSubmitModal] = useState(false)
-  const [submitRemark, setSubmitRemark] = useState('')
-  const [submitPhoto, setSubmitPhoto] = useState('')
 
   useEffect(() => {
     const savedStars = localStorage.getItem(STARS_KEY)
@@ -410,25 +169,7 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
     if (savedAchievements) setUnlockedAchievements(JSON.parse(savedAchievements))
     const savedRecords = localStorage.getItem(RECORDS_KEY)
     if (savedRecords) setRecords(JSON.parse(savedRecords))
-
-    const savedClass = localStorage.getItem(CLASS_KEY)
-    if (savedClass) {
-      const parsed = JSON.parse(savedClass) as ClassInfo
-      const normalized: ClassInfo = {
-        ...parsed,
-        students: parsed.students || [],
-        assignments: parsed.assignments || [],
-        announcements: parsed.announcements || [],
-        submissions: parsed.submissions || []
-      }
-      setClassInfo(normalized)
-      const isMember = normalized.students.some(s => s.id === user.id)
-      setJoinStatus(isMember ? 'approved' : 'none')
-    }
-
-    const savedProgress = localStorage.getItem(`homework-hero-assignment-progress-${user.id}`)
-    if (savedProgress) setAssignmentProgress(JSON.parse(savedProgress))
-  }, [user.id])
+  }, [])
 
   const saveData = useCallback(() => {
     localStorage.setItem(TASKS_KEY, JSON.stringify(tasks))
@@ -439,61 +180,17 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
     localStorage.setItem(RECORDS_KEY, JSON.stringify(records))
   }, [tasks, stars, userStats, rewards, unlockedAchievements, records])
 
-  const saveAssignmentProgress = useCallback(() => {
-    localStorage.setItem(`homework-hero-assignment-progress-${user.id}`, JSON.stringify(assignmentProgress))
-  }, [assignmentProgress, user.id])
-
-  const getAssignmentProgress = (assignmentId: number) => assignmentProgress.find(p => p.assignmentId === assignmentId)
-
-  const submitAssignment = (assignment: Assignment, remark: string, photo?: string) => {
-    const points = 10
-    const newProgress: AssignmentProgress = {
-      assignmentId: assignment.id,
-      status: 'submitted',
-      submittedAt: new Date().toISOString(),
-      remark: remark.trim(),
-      photo,
-      grade: undefined,
-      pointsEarned: points
-    }
-    setAssignmentProgress(prev => [newProgress, ...prev.filter(p => p.assignmentId !== assignment.id)])
-    setStars(s => s + points)
-    setUserStats(prev => ({ ...prev, totalPoints: prev.totalPoints + points, completedTasks: prev.completedTasks + 1 }))
-    addRecord('assignment_submitted', '✅ 提交作业', `提交 ${assignment.title} +${points} 积分`, points)
-    checkAchievements()
-    saveAssignmentProgress()
-    saveData()
-
-    // 同步提交到老师端
-    if (classInfo) {
-      const submission: Submission = {
-        assignmentId: assignment.id,
-        studentId: user.id,
-        studentName: user.nickname,
-        submittedAt: new Date().toISOString(),
-        remark: remark.trim(),
-        photo,
-        pointsEarned: points
-      }
-      const updatedClassInfo = { ...classInfo }
-      if (!updatedClassInfo.submissions) updatedClassInfo.submissions = []
-      updatedClassInfo.submissions.push(submission)
-      setClassInfo(updatedClassInfo)
-      localStorage.setItem(CLASS_KEY, JSON.stringify(updatedClassInfo))
-    }
-  }
-
-  const addRecord = useCallback((type: string, title: string, detail: string, points?: number) => {
-    const newRecord: AppRecord = { id: Date.now(), type, title, detail, points, timestamp: new Date().toISOString() }
+  const addRecord = (type: string, title: string, detail: string, points?: number) => {
+    const newRecord: Record = { id: Date.now(), type, title, detail, points, timestamp: new Date().toISOString() }
     setRecords(prev => [newRecord, ...prev].slice(0, 100))
     saveData()
-  }, [saveData])
+  }
 
   const checkAchievements = useCallback(() => {
     const newUnlocked: string[] = []
     ACHIEVEMENTS.forEach(a => { if (!unlockedAchievements.includes(a.id) && a.condition(userStats)) newUnlocked.push(a.id) })
     if (newUnlocked.length > 0) { setUnlockedAchievements(prev => [...prev, ...newUnlocked]); addRecord('achievement_unlock', '🏆 解锁新成就', `解锁了 ${newUnlocked.length} 个成就`) }
-  }, [userStats, unlockedAchievements, addRecord])
+  }, [userStats, unlockedAchievements])
 
   const addTask = () => {
     if (!newTaskName.trim()) return
@@ -542,54 +239,35 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
 
   const handleTimerComplete = (points: number, isOvertime: boolean, distractions: Distraction[]) => {
     if (!activeTimer) return
-
-    // If this timer is tied to a class assignment, record accordingly
-    const assignment = classInfo?.assignments?.find(a => a.id === activeTimer.id)
-    if (assignment) {
-      const existingProgress = getAssignmentProgress(assignment.id)
-      const earned = isOvertime ? Math.max(0, points) : points
-      const updatedProgress: AssignmentProgress = {
-        assignmentId: assignment.id,
-        status: 'submitted',
-        submittedAt: new Date().toISOString(),
-        remark: existingProgress?.remark || '',
-        photo: existingProgress?.photo,
-        pointsEarned: earned
-      }
-      setAssignmentProgress(prev => [updatedProgress, ...prev.filter(p => p.assignmentId !== assignment.id)])
-      saveAssignmentProgress()
-
-      setStars(s => s + earned)
-      setUserStats(prev => ({ ...prev, totalPomodoros: prev.totalPomodoros + 1, totalPoints: prev.totalPoints + earned, earlyCompletions: !isOvertime ? prev.earlyCompletions + 1 : prev.earlyCompletions, overtimeCompletions: isOvertime ? prev.overtimeCompletions + 1 : prev.overtimeCompletions }))
-      addRecord('assignment_pomodoro', '🍅 作业番茄完成', `完成 ${assignment.title}，获得 ${earned} 积分`, earned)
-      checkAchievements()
-      saveData()
-      setActiveTimer(null)
-      return
-    }
-
     setTasks(tasks.map(t => t.id === activeTimer.id ? { ...t, pomodorosCompleted: t.pomodorosCompleted + 1 } : t))
     setStars(s => s + points)
-    setUserStats(prev => ({ ...prev, totalPomodoros: prev.totalPomodoros + 1, totalPoints: prev.totalPoints + points, earlyCompletions: !isOvertime ? prev.earlyCompletions + 1 : prev.earlyCompletions, overtimeCompletions: isOvertime ? prev.overtimeCompletions + 1 : prev.overtimeCompletions }))
-    if (isOvertime) { addRecord('points_deducted', '⏰ 超时扣分', `任务 "${activeTimer.name}" 超时，扣除 ${points} 分`, points); setTasks(tasks.map(t => t.id === activeTimer.id ? { ...t, status: 'cancelled' as const } : t)) }
-    else { addRecord('points_earned', '⭐ 获得积分', `完成 "${activeTimer.name}" +${points} 积分`, points); setTasks(tasks.map(t => t.id === activeTimer.id ? { ...t, completed: true, completedAt: new Date().toISOString(), status: 'completed' as const } : t)) }
+    const newStats = { totalPomodoros: userStats.totalPomodoros + 1, totalPoints: userStats.totalPoints + points, completedTasks: isOvertime ? userStats.completedTasks : userStats.completedTasks + 1, earlyCompletions: !isOvertime ? userStats.earlyCompletions + 1 : userStats.earlyCompletions, overtimeCompletions: isOvertime ? userStats.overtimeCompletions + 1 : userStats.overtimeCompletions, perfectDays: userStats.perfectDays, currentStreak: userStats.currentStreak, totalRewardsRedeemed: userStats.totalRewardsRedeemed, longestStreak: userStats.longestStreak }
+    setUserStats(newStats)
+    if (isOvertime) {
+      addRecord('points_deducted', '⏰ 超时扣分', `任务 "${activeTimer.name}" 超时，扣除 ${points} 分`, points)
+      setTasks(tasks.map(t => t.id === activeTimer.id ? { ...t, status: 'cancelled' as const } : t))
+    } else {
+      addRecord('points_earned', '⭐ 获得积分', `完成 "${activeTimer.name}" +${points} 积分`, points)
+      setTasks(tasks.map(t => t.id === activeTimer.id ? { ...t, completed: true, completedAt: new Date().toISOString(), status: 'completed' as const } : t))
+    }
     checkAchievements()
     saveData()
     setActiveTimer(null)
-  }
 
-  const startPomodoroForAssignment = (assignment: Assignment) => {
-    setSelectedAssignment(assignment)
-    setActiveTimer({
-      id: assignment.id,
-      name: assignment.title,
-      subject: assignment.subject,
-      completed: false,
-      cancelled: false,
-      pomodorosCompleted: 0,
-      plannedDuration: 25,
-      status: 'in_progress'
-    })
+    // ⏰ 通知家长：任务完成/超时
+    try {
+      const parentNotifs = JSON.parse(localStorage.getItem('pending_parent_notifications') || '[]')
+      parentNotifs.push({
+        type: isOvertime ? 'alert' : 'task_complete',
+        title: isOvertime ? '⚠️ 任务超时' : '🎉 任务完成',
+        body: isOvertime ? `"${activeTimer.name}" 超时，扣${points}分` : `"${activeTimer.name}" 完成，获得 +${points} 积分 🎉`,
+        childId: user.id,
+        createdAt: Date.now(),
+      })
+      localStorage.setItem('pending_parent_notifications', JSON.stringify(parentNotifs.slice(-50)))
+      // 触发 storage 事件让家长页面实时感知
+      window.dispatchEvent(new Event('parent-notification'))
+    } catch {}
   }
 
   const formatDate = (dateStr: string) => { const date = new Date(dateStr); const now = new Date(); const diff = now.getTime() - date.getTime(); const m = Math.floor(diff / 60000); const h = Math.floor(diff / 3600000); const d = Math.floor(diff / 86400000); if (m < 1) return '刚刚'; if (m < 60) return `${m}分钟前`; if (h < 24) return `${h}小时前`; if (d < 7) return `${d}天前`; return date.toLocaleDateString('zh-CN') }
@@ -615,95 +293,12 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
         </div>
       </div>
 
-      {/* 学科任务统计 */}
-      {pendingTasks.length + inProgressTasks.length > 0 && (
-        <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-4 shadow-lg border-2 border-white">
-          <div className="flex items-center gap-2 mb-3">
-            <BookOpen className="w-5 h-5 text-[#4ECDC4]" />
-            <h3 className="font-bold text-gray-700">学科任务分布</h3>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {(() => {
-              const activeTasks = [...pendingTasks, ...inProgressTasks]
-              const subjectStats = activeTasks.reduce((acc, task) => {
-                acc[task.subject] = (acc[task.subject] || 0) + 1
-                return acc
-              }, {} as Record<string, number>)
-
-              return Object.entries(subjectStats)
-                .sort(([,a], [,b]) => (b as number) - (a as number))
-                .slice(0, 6)
-                .map(([subject, count]) => {
-                  const subjectInfo = SUBJECTS.find(s => s.name === subject)
-                  return (
-                    <div key={subject} className={`flex items-center gap-2 p-2 rounded-lg transition-colors ${subjectInfo?.lightBg || 'bg-white/50'} ${subjectInfo?.hoverBg || 'hover:bg-white/70'}`}>
-                      <span className="text-lg">{subjectInfo?.emoji}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-gray-700 truncate">{subject}</div>
-                        <div className="text-xs text-gray-500">{count} 项任务</div>
-                      </div>
-                    </div>
-                  )
-                })
-            })()}
-          </div>
-        </div>
-      )}
-
       <div className="grid grid-cols-4 gap-2">
         <button onClick={() => setShowAddTask(true)} className="flex flex-col items-center gap-1 p-2 rounded-xl bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white shadow-md hover:scale-105"><Plus className="w-5 h-5" /><span className="text-[10px] font-medium">添加</span></button>
         <button onClick={() => setCurrentSection('points')} className="flex flex-col items-center gap-1 p-2 rounded-xl bg-gradient-to-r from-[#FFE66D] to-[#FFB347] text-white shadow-md hover:scale-105"><Star className="w-5 h-5" /><span className="text-[10px] font-medium">积分</span></button>
         <button onClick={() => setCurrentSection('achievements')} className="flex flex-col items-center gap-1 p-2 rounded-xl bg-gradient-to-r from-[#A8E6CF] to-[#4ECDC4] text-white shadow-md hover:scale-105 relative"><Trophy className="w-5 h-5" /><span className="text-[10px] font-medium">成就</span>{unlockedAchievements.length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-white text-[#FF6B6B] text-xs rounded-full font-bold">{unlockedAchievements.length}</span>}</button>
         <button onClick={() => setCurrentSection('records')} className="flex flex-col items-center gap-1 p-2 rounded-xl bg-gradient-to-r from-[#4ECDC4] to-[#A8E6CF] text-white shadow-md hover:scale-105"><History className="w-5 h-5" /><span className="text-[10px] font-medium">记录</span></button>
       </div>
-
-      {classInfo ? (
-        <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-4 shadow-lg border-2 border-white">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-[#4ECDC4]" />
-              <h3 className="font-bold text-gray-700">班级作业</h3>
-            </div>
-            {joinStatus === 'pending' && <span className="text-xs text-orange-500">等待老师审批中</span>}
-            {joinStatus === 'rejected' && <span className="text-xs text-red-500">已被拒绝，请联系老师</span>}
-          </div>
-
-          {joinStatus === 'approved' ? (
-            classInfo.assignments.length === 0 ? (
-              <p className="text-sm text-gray-500">老师还未发布作业，敬请期待~</p>
-            ) : (
-              <div className="space-y-3">
-                {classInfo.assignments.map(assign => {
-                  const progress = getAssignmentProgress(assign.id)
-                  const statusTag = progress?.status === 'submitted' ? '已提交' : '待完成'
-                  return (
-                    <div key={assign.id} className="border rounded-2xl p-3 bg-white">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="font-medium text-gray-800 truncate">{assign.title}</div>
-                          <div className="text-xs text-gray-500 mt-0.5">{assign.subject} {assign.dueDate ? `· 截止 ${assign.dueDate}` : ''}</div>
-                        </div>
-                        <div className="text-xs text-gray-500 px-2 py-1 rounded-full bg-gray-100">{statusTag}</div>
-                      </div>
-                      <div className="mt-2 flex items-center gap-2">
-                        <button onClick={() => startPomodoroForAssignment(assign)} className="px-3 py-1 rounded-full bg-[#4ECDC4] text-white text-xs">番茄钟</button>
-                        <button onClick={() => { setSelectedAssignment(assign); setShowSubmitModal(true); }} className="px-3 py-1 rounded-full bg-[#FF6B6B] text-white text-xs">打卡提交</button>
-                        {progress?.pointsEarned != null && <span className="text-xs text-green-600">+{progress.pointsEarned} 积分</span>}
-                      </div>
-                      {progress?.remark && <div className="mt-2 text-xs text-gray-600">备注：{progress.remark}</div>}
-                      {progress?.photo && <img src={progress.photo} alt="提交" className="mt-2 w-full h-24 object-cover rounded-xl" />}
-                    </div>
-                  )
-                })}
-              </div>
-            )
-          ) : (
-            <div className="text-sm text-gray-500">
-              班级功能开发中，敬请期待！
-            </div>
-          )}
-        </div>
-      ) : null}
 
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -723,129 +318,34 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
         {tasks.length === 0 ? (
           <div className="text-center py-8 bg-white/60 rounded-2xl border-2 border-white"><div className="text-4xl mb-2">📚</div><p className="text-gray-500 text-sm">还没有作业任务</p></div>
         ) : (
-          <div className="space-y-4">
-            {/* 按学科分组显示作业 */}
-            {(() => {
-              const pendingTasks = tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled')
-              const groupedTasks = pendingTasks.reduce((acc, task) => {
-                if (!acc[task.subject]) acc[task.subject] = []
-                acc[task.subject].push(task)
-                return acc
-              }, {} as Record<string, HomeworkTask[]>)
-
-              return Object.entries(groupedTasks).map(([subject, subjectTasks]) => {
-                const subjectInfo = SUBJECTS.find(s => s.name === subject)
-                return (
-                  <div key={subject} className={`rounded-2xl p-4 shadow-md border-2 transition-all hover:shadow-lg ${subjectInfo?.borderColor || 'border-gray-200'} ${subjectInfo?.bgColor || 'bg-white'} hover:scale-[1.02]`}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-lg">{subjectInfo?.emoji}</span>
-                      <h4 className="font-bold text-gray-700">{subject}</h4>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${subjectInfo?.color || 'bg-gray-100'}`}>
-                        {(subjectTasks as HomeworkTask[]).length} 项
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      {(subjectTasks as HomeworkTask[]).slice(0, 5).map(task => (
-                        <div key={task.id} className={`rounded-xl p-3 border-2 hover:border-[#A8E6CF] transition-colors ${task.status === 'in_progress' ? 'border-[#4ECDC4] bg-[#4ECDC4]/5' : 'border-gray-100 bg-gray-50/50'}`}>
-                          <div className="flex items-center gap-3">
-                            <button 
-                              onClick={() => !task.completed && completeTask(task.id)} 
-                              disabled={task.status === 'in_progress'} 
-                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                                task.completed 
-                                  ? 'bg-[#4ECDC4] border-[#4ECDC4]' 
-                                  : task.status === 'in_progress' 
-                                    ? 'bg-[#FFE66D] border-[#FFE66D] animate-pulse' 
-                                    : 'border-[#FFE66D] hover:border-[#4ECDC4]'
-                              }`}
-                            >
-                              {task.completed && <Check className="w-4 h-4 text-white" />}
-                              {task.status === 'in_progress' && <Play className="w-3 h-3 text-white" />}
-                            </button>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-sm text-gray-800 truncate">{task.name}</div>
-                              <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5">
-                                <Clock className="w-3 h-3" />
-                                {task.plannedDuration}分钟 
-                                {task.pomodorosCompleted > 0 && <span className="text-[#4ECDC4]">• 🍅 {task.pomodorosCompleted}</span>}
-                              </div>
-                            </div>
-                            <div className="flex gap-1">
-                              {task.status === 'pending' && (
-                                <button 
-                                  onClick={() => { startTask(task.id); setActiveTimer(task); }} 
-                                  className="p-1.5 bg-[#4ECDC4] text-white rounded-lg hover:bg-[#3dbdb5] transition-colors"
-                                  title="开始番茄钟"
-                                >
-                                  <Play className="w-4 h-4" />
-                                </button>
-                              )}
-                              {task.status === 'in_progress' && (
-                                <button 
-                                  onClick={() => setActiveTimer(task)} 
-                                  className="p-1.5 bg-[#FFE66D] text-white rounded-lg hover:bg-[#ffd43b] transition-colors animate-pulse"
-                                  title="继续番茄钟"
-                                >
-                                  <Play className="w-4 h-4" />
-                                </button>
-                              )}
-                              <button 
-                                onClick={() => cancelTask(task.id)} 
-                                className="p-1.5 bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200 transition-colors"
-                                title="取消任务"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => deleteTask(task.id)} 
-                                className="p-1.5 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
-                                title="删除任务"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      {(subjectTasks as HomeworkTask[]).length > 5 && (
-                        <div className="text-center py-2">
-                          <span className="text-xs text-gray-400">还有 {(subjectTasks as HomeworkTask[]).length - 5} 项...</span>
-                        </div>
-                      )}
-                    </div>
+          <div className="space-y-2">
+            {tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').slice(0, 10).map(task => (
+              <div key={task.id} className={`bg-white rounded-2xl p-3 shadow-md hover:shadow-lg border-2 hover:border-[#A8E6CF] ${task.status === 'in_progress' ? 'border-[#4ECDC4]' : ''}`}>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => !task.completed && completeTask(task.id)} disabled={task.status === 'in_progress'} className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${task.completed ? 'bg-[#4ECDC4] border-[#4ECDC4]' : task.status === 'in_progress' ? 'bg-[#FFE66D] border-[#FFE66D] animate-pulse' : 'border-[#FFE66D] hover:border-[#4ECDC4]'}`}>{task.completed && <Check className="w-4 h-4 text-white" />}{task.status === 'in_progress' && <Play className="w-3 h-3 text-white" />}</button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2"><span className={`px-1.5 py-0.5 rounded text-xs font-medium ${SUBJECTS.find(s => s.name === task.subject)?.color || 'bg-gray-100'}`}>{SUBJECTS.find(s => s.name === task.subject)?.emoji}</span><span className={`font-medium text-sm truncate ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>{task.name}</span></div>
+                    <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5"><Clock className="w-3 h-3" />{task.plannedDuration}分钟 {task.pomodorosCompleted > 0 && <span className="text-[#4ECDC4]">• 🍅 {task.pomodorosCompleted}</span>}</div>
                   </div>
-                )
-              })
-            })()}
-
-            {/* 已完成任务汇总 */}
-            {completedTasks.length > 0 && (
-              <div className="bg-white rounded-2xl p-4 shadow-md border-2 border-white">
-                <div className="flex items-center gap-2 mb-3">
-                  <Check className="w-5 h-5 text-[#4ECDC4]" />
-                  <h4 className="font-bold text-gray-700">已完成</h4>
-                  <span className="px-2 py-1 bg-[#4ECDC4] text-white rounded-full text-xs font-medium">
-                    {completedTasks.length} 项
-                  </span>
+                  <div className="flex gap-1">
+                    {task.status === 'pending' && <button onClick={() => { startTask(task.id); setActiveTimer(task); }} className="p-1.5 bg-[#4ECDC4] text-white rounded-lg hover:bg-[#3dbdb5]"><Play className="w-4 h-4" /></button>}
+                    {task.status === 'in_progress' && <button onClick={() => setActiveTimer(task)} className="p-1.5 bg-[#FFE66D] text-white rounded-lg hover:bg-[#ffd43b]"><Play className="w-4 h-4" /></button>}
+                    <button onClick={() => cancelTask(task.id)} className="p-1.5 bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200"><X className="w-4 h-4" /></button>
+                    <button onClick={() => deleteTask(task.id)} className="p-1.5 bg-red-50 text-red-500 rounded-lg hover:bg-red-100"><Trash2 className="w-4 h-4" /></button>
+                  </div>
                 </div>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {completedTasks.slice(0, 10).map(task => {
-                    const subjectInfo = SUBJECTS.find(s => s.name === task.subject)
-                    return (
-                      <div key={task.id} className={`flex items-center gap-2 p-2 rounded-lg opacity-75 ${subjectInfo?.lightBg || 'bg-gray-50'}`}>
-                        <span className="text-sm">{subjectInfo?.emoji}</span>
-                        <span className="text-sm text-gray-600 line-through flex-1 truncate">{task.name}</span>
-                        <span className="text-xs text-gray-400">
-                          {task.completedAt ? new Date(task.completedAt).toLocaleDateString() : ''}
-                        </span>
-                      </div>
-                    )
-                  })}
-                  {completedTasks.length > 10 && (
-                    <div className="text-center py-1">
-                      <span className="text-xs text-gray-400">还有 {completedTasks.length - 10} 项...</span>
+              </div>
+            ))}
+            {completedTasks.length > 0 && (
+              <div className="mt-4">
+                <h4 className="text-sm font-medium text-gray-500 mb-2">已完成 ({completedTasks.length})</h4>
+                <div className="space-y-1 opacity-60">
+                  {completedTasks.slice(0, 5).map(task => (
+                    <div key={task.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-xl">
+                      <Check className="w-4 h-4 text-[#4ECDC4]" />
+                      <span className="text-sm text-gray-500 line-through">{task.name}</span>
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
             )}
@@ -905,43 +405,6 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
             <input type="number" value={newRewardPoints} onChange={(e) => setNewRewardPoints(Number(e.target.value))} placeholder="所需积分" className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-3" />
             <div className="flex gap-2 mb-4"><input type="text" value={newRewardIcon} onChange={(e) => setNewRewardIcon(e.target.value)} placeholder="图标" className="w-16 px-3 py-2 border-2 border-[#FFE66D] rounded-xl text-center" /><span className="text-2xl self-center">{newRewardIcon}</span></div>
             <div className="flex gap-2"><button onClick={addReward} className="flex-1 py-2 bg-[#FF6B6B] text-white rounded-xl font-medium">添加</button><button onClick={() => setShowAddReward(false)} className="px-4 py-2 bg-gray-200 text-gray-600 rounded-xl font-medium">取消</button></div>
-          </div>
-        </div>
-      )}
-
-      {showSubmitModal && selectedAssignment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full">
-            <h3 className="text-lg font-bold mb-4">提交作业</h3>
-            <div className="mb-3">
-              <div className="text-sm text-gray-600 mb-1">{selectedAssignment.title}</div>
-              <textarea value={submitRemark} onChange={(e) => setSubmitRemark(e.target.value)} placeholder="填写完成说明（可选）" className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-3" rows={3} />
-              <div className="text-sm text-gray-600 mb-1">上传照片（可选）</div>
-              <input type="file" accept="image/*" onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (!file) return
-                const reader = new FileReader()
-                reader.onload = () => {
-                  setSubmitPhoto(reader.result as string)
-                }
-                reader.readAsDataURL(file)
-              }} className="w-full" />
-              {submitPhoto && <img src={submitPhoto} alt="提交图片" className="mt-3 w-full h-32 object-cover rounded-xl" />}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => {
-                if (!selectedAssignment) return
-                submitAssignment(selectedAssignment, submitRemark, submitPhoto)
-                setShowSubmitModal(false)
-                setSubmitRemark('')
-                setSubmitPhoto('')
-              }} className="flex-1 py-2 bg-[#4ECDC4] text-white rounded-xl font-medium">提交</button>
-              <button onClick={() => {
-                setShowSubmitModal(false)
-                setSubmitRemark('')
-                setSubmitPhoto('')
-              }} className="px-4 py-2 bg-gray-200 text-gray-600 rounded-xl font-medium">取消</button>
-            </div>
           </div>
         </div>
       )}
@@ -1146,11 +609,37 @@ function ParentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => vo
   const [childName, setChildName] = useState('')
   const [childPhone, setChildPhone] = useState('')
   const [manualPoints, setManualPoints] = useState(0)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [showChangePw, setShowChangePw] = useState(false)
+  const [showForgot, setShowForgot] = useState(false)
+  const { addNotification } = useNotifications()
 
+  // 注册家长账号（用于找回密码）
   useEffect(() => {
-    const savedChildren = localStorage.getItem(CHILDREN_KEY)
-    if (savedChildren) setChildren(JSON.parse(savedChildren))
-  }, [])
+    if (user.phone) {
+      registerParentAccount(user.phone, user.nickname.replace('的家长', ''), user.id)
+    }
+  }, [user])
+
+  // 监听孩子端任务事件，实时拉取通知
+  useEffect(() => {
+    const flushPending = () => {
+      try {
+        const pending = JSON.parse(localStorage.getItem('pending_parent_notifications') || '[]')
+        if (pending.length > 0) {
+          pending.forEach((n: any) => addNotification(n))
+          localStorage.setItem('pending_parent_notifications', '[]')
+        }
+      } catch {}
+    }
+    // 初始拉取
+    flushPending()
+    // 监听孩子端事件
+    window.addEventListener('parent-notification', flushPending)
+    // 每30秒轮询一次兜底
+    const interval = setInterval(flushPending, 30000)
+    return () => { window.removeEventListener('parent-notification', flushPending); clearInterval(interval) }
+  }, [addNotification])
 
   const saveChildren = (newChildren: Child[]) => {
     setChildren(newChildren)
@@ -1170,6 +659,11 @@ function ParentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => vo
     setManualPoints(0)
   }
 
+  const { unreadCount } = useNotifications()
+
+  if (showNotifications) return <NotificationsPage onBack={() => setShowNotifications(false)} />
+  if (showChangePw) return <ChangePasswordPage user={user} onBack={() => setShowChangePw(false)} />
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 pb-20">
       <header className="bg-white/80 backdrop-blur-md shadow-lg sticky top-0 z-10">
@@ -1179,7 +673,27 @@ function ParentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => vo
               <div className="w-10 h-10 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center shadow-lg"><span className="text-xl">👨‍👩‍👧</span></div>
               <div><h1 className="text-lg font-black text-gray-800">家长中心</h1><p className="text-xs text-gray-500">管理孩子学习</p></div>
             </div>
-            <button onClick={onLogout} className="p-2 text-gray-400 hover:text-gray-600"><LogOut className="w-4 h-4" /></button>
+            <div className="flex items-center gap-2">
+              {/* 通知中心 */}
+              <button
+                onClick={() => setShowNotifications(true)}
+                className="relative p-2 text-gray-500 hover:text-[#FF6B6B] transition-colors"
+              >
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-[#FF6B6B] text-white text-xs rounded-full font-bold flex items-center justify-center">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+              {/* 设置菜单 */}
+              <div className="relative">
+                <button onClick={() => setShowChangePw(true)} className="p-2 text-gray-400 hover:text-gray-700">
+                  <Lock className="w-4 h-4" />
+                </button>
+              </div>
+              <button onClick={onLogout} className="p-2 text-gray-400 hover:text-gray-600"><LogOut className="w-4 h-4" /></button>
+            </div>
           </div>
         </div>
       </header>
@@ -1246,64 +760,26 @@ function ParentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => vo
 
 function TeacherHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) {
   const [classInfo, setClassInfo] = useState<ClassInfo | null>(null)
-  const [newClassSchool, setNewClassSchool] = useState(user.school || '')
-  const [newClassName, setNewClassName] = useState(user.className || '')
   const [homeworkName, setHomeworkName] = useState('')
   const [homeworkSubject, setHomeworkSubject] = useState('数学')
   const [homeworkDesc, setHomeworkDesc] = useState('')
-  const [homeworkDue, setHomeworkDue] = useState('')
-  const [announcementTitle, setAnnouncementTitle] = useState('')
-  const [announcementContent, setAnnouncementContent] = useState('')
 
   useEffect(() => {
     const savedClass = localStorage.getItem(CLASS_KEY)
-    if (savedClass) {
-      const parsed = JSON.parse(savedClass) as ClassInfo
-      const normalized: ClassInfo = {
-        ...parsed,
-        students: parsed.students || [],
-        assignments: parsed.assignments || [],
-        announcements: parsed.announcements || [],
-        submissions: parsed.submissions || []
-      }
-      setClassInfo(normalized)
-      setNewClassSchool(normalized.school || user.school || '')
-      setNewClassName(normalized.name || user.className || '')
-    }
-  }, [user.school, user.className])
+    if (savedClass) setClassInfo(JSON.parse(savedClass))
+  }, [])
 
   const createClass = () => {
-    if (!newClassSchool.trim() || !newClassName.trim()) return
-    const newClass: ClassInfo = {
-      id: Date.now().toString(),
-      name: newClassName,
-      school: newClassSchool,
-      code: Math.random().toString(36).substring(2, 8).toUpperCase(),
-      students: [],
-      assignments: [],
-      announcements: [],
-      submissions: []
-    }
+    if (!classInfo) return
+    const newClass: ClassInfo = { id: Date.now().toString(), name: classInfo.name, code: Math.random().toString(36).substring(2, 8).toUpperCase(), students: [] }
     setClassInfo(newClass)
     localStorage.setItem(CLASS_KEY, JSON.stringify(newClass))
   }
 
   const publishHomework = () => {
     if (!homeworkName.trim() || !classInfo) return
-    const newAssignment: Assignment = {
-      id: Date.now(),
-      title: homeworkName.trim(),
-      subject: homeworkSubject,
-      description: homeworkDesc.trim(),
-      dueDate: homeworkDue || undefined,
-      createdAt: new Date().toISOString()
-    }
-    const updatedClass = { ...classInfo, assignments: [newAssignment, ...(classInfo.assignments || [])] }
-    setClassInfo(updatedClass)
-    localStorage.setItem(CLASS_KEY, JSON.stringify(updatedClass))
-
     alert(`作业 "${homeworkName}" 已发布到班级 ${classInfo.name}！`)
-    setHomeworkName(''); setHomeworkDesc(''); setHomeworkDue('')
+    setHomeworkName(''); setHomeworkDesc('')
   }
 
   return (
@@ -1325,19 +801,15 @@ function TeacherHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
           <div className="bg-white rounded-2xl p-6 shadow-lg text-center">
             <div className="text-4xl mb-4">🏫</div>
             <h3 className="text-lg font-bold mb-2">创建班级</h3>
-            <p className="text-gray-500 text-sm mb-4">输入学校和班级信息以完成注册</p>
-            <input type="text" value={newClassSchool} onChange={(e) => setNewClassSchool(e.target.value)} placeholder="学校名称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl mb-3" />
-            <input type="text" value={newClassName} onChange={(e) => setNewClassName(e.target.value)} placeholder="班级名称（如：三年级一班）" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl mb-4" />
-            <button onClick={createClass} disabled={!newClassSchool.trim() || !newClassName.trim()} className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold disabled:opacity-50">创建班级</button>
+            <p className="text-gray-500 text-sm mb-4">创建您的第一个班级，生成班级码让学生加入</p>
+            <input type="text" value={classInfo?.name || ''} onChange={(e) => setClassInfo({ id: '', name: e.target.value, code: '', students: [] })} placeholder="班级名称（如：三年级一班）" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl mb-4" />
+            <button onClick={createClass} disabled={!classInfo?.name} className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold disabled:opacity-50">创建班级</button>
           </div>
         ) : (
           <>
             <div className="bg-white rounded-2xl p-4 shadow-lg">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="font-bold text-gray-800 flex items-center gap-2"><Users className="w-5 h-5 text-[#4ECDC4]" />{classInfo.name}</h3>
-                  <p className="text-xs text-gray-500">学校：{classInfo.school || user.school || '未知'}</p>
-                </div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2"><Users className="w-5 h-5 text-[#4ECDC4]" />{classInfo.name}</h3>
                 <div className="px-3 py-1 bg-[#FFE66D] rounded-full text-sm font-bold">{classInfo.code}</div>
               </div>
               <div className="text-center py-4">
@@ -1346,99 +818,21 @@ function TeacherHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
               </div>
             </div>
 
-
-
             <div className="bg-white rounded-2xl p-4 shadow-lg">
               <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><BookMarked className="w-5 h-5 text-[#FF6B6B]" />发布作业</h3>
               <input type="text" value={homeworkName} onChange={(e) => setHomeworkName(e.target.value)} placeholder="作业标题" className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-3" />
               <div className="flex gap-2 mb-3 overflow-x-auto">{SUBJECTS.map(s => (<button key={s.name} onClick={() => setHomeworkSubject(s.name)} className={`px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${homeworkSubject === s.name ? s.color + ' ring-2 ring-[#FF6B6B]' : 'bg-gray-100'}`}>{s.emoji} {s.name}</button>))}</div>
-              <textarea value={homeworkDesc} onChange={(e) => setHomeworkDesc(e.target.value)} placeholder="作业描述（可选）" className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-3" rows={3} />
-              <input type="date" value={homeworkDue} onChange={(e) => setHomeworkDue(e.target.value)} className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-4" />
+              <textarea value={homeworkDesc} onChange={(e) => setHomeworkDesc(e.target.value)} placeholder="作业描述（可选）" className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-4" rows={3} />
               <button onClick={publishHomework} disabled={!homeworkName.trim()} className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold disabled:opacity-50">发布作业</button>
             </div>
 
             <div className="bg-white rounded-2xl p-4 shadow-lg">
               <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><BarChart3 className="w-5 h-5 text-[#A8E6CF]" />数据统计</h3>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="bg-gray-50 p-3 rounded-xl"><div className="text-2xl font-bold text-[#FFE66D]">{classInfo.students.length}</div><div className="text-xs text-gray-500">学生数</div></div>
-                <div className="bg-gray-50 p-3 rounded-xl"><div className="text-2xl font-bold text-[#4ECDC4]">{classInfo.assignments.length}</div><div className="text-xs text-gray-500">发布作业</div></div>
-                <div className="bg-gray-50 p-3 rounded-xl"><div className="text-2xl font-bold text-[#A8E6CF]">{classInfo.announcements.length}</div><div className="text-xs text-gray-500">公告数量</div></div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-4 shadow-lg">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Users className="w-5 h-5 text-[#4ECDC4]" />学生列表</h3>
-              {classInfo.students.length === 0 ? (
-                <p className="text-sm text-gray-500">当前暂无学生加入，学生通过班级码申请加入后会显示在这里。</p>
-              ) : (
-                <div className="space-y-2">
-                  {classInfo.students.map(s => (
-                    <div key={s.id} className="flex items-center justify-between border rounded-xl p-3">
-                      <div>
-                        <div className="font-medium">{s.nickname}</div>
-                        <div className="text-xs text-gray-500">{s.grade || '未知'} • {s.stars} 积分</div>
-                      </div>
-                      <button onClick={() => {
-                        const points = parseInt(prompt('输入要奖励的积分数量（正数为加分，负数为扣分）', '10') || '0', 10)
-                        if (!Number.isFinite(points)) return
-                        const updated = { ...classInfo }
-                        updated.students = updated.students.map(st => st.id === s.id ? { ...st, stars: Math.max(0, st.stars + points) } : st)
-                        setClassInfo(updated)
-                        localStorage.setItem(CLASS_KEY, JSON.stringify(updated))
-                      }} className="text-xs px-3 py-1 bg-[#4ECDC4] text-white rounded-full">奖励积分</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="bg-white rounded-2xl p-4 shadow-lg">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><BookMarked className="w-5 h-5 text-[#FF6B6B]" />作业提交</h3>
-              {(!classInfo.submissions || classInfo.submissions.length === 0) ? (
-                <p className="text-sm text-gray-500">暂无作业提交。</p>
-              ) : (
-                <div className="space-y-3">
-                  {classInfo.submissions.map((sub, index) => (
-                    <div key={index} className="border rounded-xl p-3">
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <div className="font-medium">{sub.studentName}</div>
-                          <div className="text-xs text-gray-500">{new Date(sub.submittedAt).toLocaleString()}</div>
-                        </div>
-                        <div className="text-xs text-green-600">+{sub.pointsEarned} 积分</div>
-                      </div>
-                      <div className="text-sm text-gray-600 mb-2">{classInfo.assignments.find(a => a.id === sub.assignmentId)?.title || '未知作业'}</div>
-                      {sub.remark && <div className="text-sm text-gray-600 mb-2">备注：{sub.remark}</div>}
-                      {sub.photo && <img src={sub.photo} alt="提交图片" className="w-full h-24 object-cover rounded-xl" />}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="bg-white rounded-2xl p-4 shadow-lg">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5 text-[#FFB347]" />班级公告</h3>
-              <div className="mb-3">
-                <input value={announcementTitle} onChange={(e) => setAnnouncementTitle(e.target.value)} placeholder="公告标题" className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-2" />
-                <textarea value={announcementContent} onChange={(e) => setAnnouncementContent(e.target.value)} placeholder="公告内容" className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl mb-2" rows={3} />
-                <button onClick={() => {
-                  if (!announcementTitle.trim() || !announcementContent.trim() || !classInfo) return
-                  const updated = { ...classInfo }
-                  updated.announcements = [{ id: Date.now(), title: announcementTitle.trim(), content: announcementContent.trim(), createdAt: new Date().toISOString() }, ...(updated.announcements || [])]
-                  setClassInfo(updated)
-                  localStorage.setItem(CLASS_KEY, JSON.stringify(updated))
-                  setAnnouncementTitle(''); setAnnouncementContent('')
-                }} className="w-full py-2 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold">发布公告</button>
-              </div>
-              <div className="space-y-2">
-                {classInfo.announcements.length === 0 ? <p className="text-xs text-gray-500">暂无公告</p> : classInfo.announcements.map(a => (
-                  <div key={a.id} className="border p-3 rounded-xl">
-                    <div className="flex justify-between items-center">
-                      <div className="font-medium">{a.title}</div>
-                      <div className="text-xs text-gray-400">{new Date(a.createdAt).toLocaleString()}</div>
-                    </div>
-                    <div className="text-sm text-gray-600 mt-1">{a.content}</div>
-                  </div>
-                ))}
+                <div className="bg-gray-50 p-3 rounded-xl"><div className="text-2xl font-bold text-[#4ECDC4]">0</div><div className="text-xs text-gray-500">今日作业</div></div>
+                <div className="bg-gray-50 p-3 rounded-xl"><div className="text-2xl font-bold text-[#FF6B6B]">0</div><div className="text-xs text-gray-500">完成率</div></div>
+                <div className="bg-gray-50 p-3 rounded-xl"><div className="text-2xl font-bold text-[#A8E6CF]">0</div><div className="text-xs text-gray-500">平均积分</div></div>
               </div>
             </div>
           </>
@@ -1448,18 +842,34 @@ function TeacherHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
   )
 }
 
-export default function App() {
+function AppInner() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(null)
+  const [showForgot, setShowForgot] = useState(false)
 
   useEffect(() => { const user = getCurrentUser(); if (user) { setIsLoggedIn(true); setCurrentUser(user) } }, [])
 
-  const handleLogin = (user: UserInfo) => { setCurrentUser(user); localStorage.setItem('homework-hero-user', JSON.stringify(user)); setIsLoggedIn(true) }
+  const handleLogin = (user: UserInfo) => {
+    setCurrentUser(user)
+    if (user.phone) registerParentAccount(user.phone, user.nickname.replace('的家长', ''), user.id)
+    localStorage.setItem('homework-hero-user', JSON.stringify(user))
+    setIsLoggedIn(true)
+  }
   const handleLogout = () => { logout(); setIsLoggedIn(false); setCurrentUser(null) }
 
-  if (!isLoggedIn || !currentUser) return <LoginPage onLogin={handleLogin} />
+  if (showForgot) return <ForgotPasswordPage onBack={() => setShowForgot(false)} onLogin={() => { setShowForgot(false); handleLogout() }} />
+
+  if (!isLoggedIn || !currentUser) return <LoginPage onLogin={handleLogin} onForgot={() => setShowForgot(true)} />
 
   if (currentUser.role === 'parent') return <ParentHomePage user={currentUser} onLogout={handleLogout} />
   if (currentUser.role === 'teacher') return <TeacherHomePage user={currentUser} onLogout={handleLogout} />
   return <StudentHomePage user={currentUser} onLogout={handleLogout} />
+}
+
+export default function App() {
+  return (
+    <NotificationProvider>
+      <AppInner />
+    </NotificationProvider>
+  )
 }
