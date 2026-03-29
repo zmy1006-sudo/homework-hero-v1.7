@@ -1,4 +1,4 @@
-import { UserInfo } from '../App'
+import { UserInfo } from '../lib/auth'
 
 export interface ParentAccount {
   phone: string

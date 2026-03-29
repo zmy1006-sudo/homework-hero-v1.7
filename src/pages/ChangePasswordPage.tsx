@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Eye, EyeOff, ArrowLeft, CheckCircle, AlertCircle, Lock } from 'lucide-react'
 import { verifyParentPassword, updateParentPassword } from '../lib/parentAccounts'
-import { UserInfo } from '../App'
+import { UserInfo } from '../lib/auth'
 
 interface Props {
   user: UserInfo

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Play, Pause, RotateCcw } from 'lucide-react'
+import { X, Play, Pause, Check, RotateCcw, Flag } from 'lucide-react'
 
+// Types
 export interface HomeworkTask {
   id: number
   name: string
@@ -12,347 +13,359 @@ export interface HomeworkTask {
   completedAt?: string
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
 }
+export interface Distraction { id: number; type: string; timestamp: number }
 
-export interface Distraction {
-  id: number
-  type: string
-  timestamp: number
-}
-
-const DISTRACTIONS = [
-  { type: '喝水', emoji: '💧' },
-  { type: '伸懒腰', emoji: '🙆' },
-  { type: '上厕所', emoji: '🚽' },
-  { type: '吃东西', emoji: '🍎' },
-  { type: '发呆', emoji: '😴' },
-  { type: '看课外书', emoji: '📖' },
-  { type: '其他', emoji: '📌' },
+const DISTRACTION_TYPES = [
+  { type: '喝水', emoji: '💧' }, { type: '伸懒腰', emoji: '🙆' },
+  { type: '上厕所', emoji: '🚽' }, { type: '吃东西', emoji: '🍎' },
+  { type: '发呆', emoji: '😴' }, { type: '看课外书', emoji: '📖' },
+  { type: '玩玩具', emoji: '🧸' }, { type: '其他', emoji: '📌' },
 ]
+const STORAGE_KEY = 'hh-pomodoro-v10'
 
-const STORAGE_KEY = 'hh-pomodoro'
-
-function saveState(data: object) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+// ─────────────────────────────────────────────
+//  中文语音预加载
+// ─────────────────────────────────────────────
+let _zhVoice: SpeechSynthesisVoice | null = null
+function _loadVoice() {
+  if (!window.speechSynthesis) return
+  const trySet = () => {
+    const vs = window.speechSynthesis.getVoices()
+    _zhVoice = vs.find(v => v.lang.includes('zh') || v.lang.includes('CN')) || vs[0] || null
+  }
+  trySet()
+  if (!_zhVoice) window.speechSynthesis.addEventListener('voiceschanged', trySet, { once: true })
 }
-function loadState() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') } catch { return null }
-}
-function clearState() { localStorage.removeItem(STORAGE_KEY) }
+_loadVoice()
 
-function formatTime(secs: number) {
-  const m = Math.floor(Math.abs(secs) / 60)
-  const s = Math.abs(secs) % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
+function speak(text: string) {
+  if (!window.speechSynthesis) return
+  window.speechSynthesis.cancel()
+  const u = new SpeechSynthesisUtterance(text)
+  u.lang = 'zh-CN'; u.rate = 1.1; u.pitch = 1.0
+  if (_zhVoice) u.voice = _zhVoice
+  window.speechSynthesis.speak(u)
 }
 
-/** 大号 SVG 圆环 — 极简设计 */
-function TimerRing({ progress, color }: { progress: number; color: string }) {
-  const R = 100, W = 10, C = 2 * Math.PI * R
-  const offset = C - (progress / 100) * C
+// ─────────────────────────────────────────────
+//  V1.6 番茄钟环形
+// ─────────────────────────────────────────────
+function TomatoRing({ progress, isOvertime }: { progress: number; isOvertime: boolean }) {
+  const size = 280
+  const cx = size / 2, cy = size / 2
+  const R = size / 2 - 20
+  const r2 = R - 14
+  const C = 2 * Math.PI * r2
+  const color = isOvertime ? '#DC2626' : progress > 80 ? '#EF4444' : progress >= 50 ? '#F97316' : '#4ADE80'
+  const dashOffset = isOvertime ? 0 : C * (1 - progress / 100)
+
+  // 刻度
+  const ticks = Array.from({ length: 13 }, (_, i) => {
+    const frac = i / 12, angle = frac * 360 - 90
+    const rad = (angle * Math.PI) / 180
+    return {
+      x1: cx + R * Math.cos(rad), y1: cy + R * Math.sin(rad),
+      x2: cx + (R - 10) * Math.cos(rad), y2: cy + (R - 10) * Math.sin(rad),
+    }
+  })
+
+  // 终点坐标
+  const endAngle = isOvertime ? 0 : 2 * Math.PI * (1 - progress / 100)
+  const px = cx + r2 * Math.cos(Math.PI / 2 + endAngle)
+  const py = cy - r2 * Math.sin(Math.PI / 2 + endAngle)
+
   return (
-    <svg viewBox="0 0 220 220" className="w-full max-w-[220px]">
-      {/* 背景轨道 */}
-      <circle cx="110" cy="110" r={R} fill="none" stroke="#E8E8E8" strokeWidth={W} />
+    <svg viewBox={`0 0 ${size} ${size}`} className="w-full max-w-xs select-none">
+      <defs>
+        <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="outerGlow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="14" result="b"/><feMerge><feMergeNode in="b"/></feMerge>
+        </filter>
+      </defs>
+
+      {/* 外层光晕 */}
+      {isOvertime ? (
+        <circle cx={cx} cy={cy} r={R + 5} fill="none" stroke="#DC2626" strokeWidth="10"
+          strokeOpacity="0.25" filter="url(#outerGlow)"/>
+      ) : progress > 20 ? (
+        <circle cx={cx} cy={cy} r={R + 5} fill="none" stroke={color} strokeWidth="5"
+          strokeOpacity="0.18" filter="url(#outerGlow)"/>
+      ) : null}
+
+      {/* 刻度线 */}
+      {ticks.map((t, i) => (
+        <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2}
+          stroke="rgba(0,0,0,0.12)" strokeWidth={i % 5 === 0 ? 2 : 1} strokeLinecap="round"/>
+      ))}
+
+      {/* 轨道 */}
+      <circle cx={cx} cy={cy} r={R} fill="none" stroke="rgba(0,0,0,0.07)" strokeWidth="1"/>
+
+      {/* 白底 */}
+      <circle cx={cx} cy={cy} r={r2} fill="white"/>
+
       {/* 进度弧 */}
-      <circle
-        cx="110" cy="110" r={R}
-        fill="none"
-        stroke={color}
-        strokeWidth={W}
-        strokeLinecap="round"
-        strokeDasharray={C}
-        strokeDashoffset={offset}
-        transform="rotate(-90 110 110)"
-        style={{ transition: 'stroke-dashoffset 0.8s ease, stroke 0.5s ease' }}
-      />
+      <circle cx={cx} cy={cy} r={r2}
+        fill="none" stroke={color} strokeWidth="10" strokeLinecap="round"
+        strokeDasharray={C} strokeDashoffset={dashOffset}
+        transform={`rotate(-90 ${cx} ${cy})`}
+        filter="url(#glow)"
+        style={{ transition: 'stroke-dashoffset 0.9s cubic-bezier(0.4,0,0.2,1), stroke 0.5s ease' }}/>
+
+      {/* 终点红点 */}
+      {!isOvertime && progress > 0 && (
+        <>
+          <circle cx={px} cy={py} r="7" fill={color} filter="url(#glow)"/>
+          <circle cx={px} cy={py} r="3" fill="white"/>
+        </>
+      )}
     </svg>
   )
 }
 
-interface PomodoroTimerPageProps {
+// ─────────────────────────────────────────────
+//  格式化
+// ─────────────────────────────────────────────
+function fmtTime(secs: number) {
+  const m = Math.floor(Math.abs(secs) / 60), s = Math.abs(secs) % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+// ─────────────────────────────────────────────
+//  主组件
+// ─────────────────────────────────────────────
+interface Props {
   task: HomeworkTask
-  onComplete: (points: number, isOvertime: boolean, distractions: Distraction[]) => void
+  onComplete: (pts: number, iso: boolean, dist: Distraction[]) => void
   onCancel: () => void
 }
 
-export default function PomodoroTimerPage({ task, onComplete, onCancel }: PomodoroTimerPageProps) {
+export default function PomodoroTimerPage({ task, onComplete, onCancel }: Props) {
   const totalSecs = task.plannedDuration * 60
-
-  // === State ===
-  const [phase, setPhase] = useState<'idle' | 'running' | 'overtime' | 'rest' | 'done'>('idle')
   const [timeLeft, setTimeLeft] = useState(totalSecs)
+  const [isRunning, setIsRunning] = useState(false)
+  const [isOvertime, setIsOvertime] = useState(false)
+  const [overtimeSecs, setOvertimeSecs] = useState(0)
   const [distractions, setDistractions] = useState<Distraction[]>([])
-  const [showDistractions, setShowDistractions] = useState(false)
-  const [showQuit, setShowQuit] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const startTimeRef = useRef<number | null>(null)
+  const [showDistraction, setShowDistraction] = useState(false)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastReportedRef = useRef<number>(0)
+  const lastBeepSecRef = useRef<number>(-1)
+  const audioCtxRef = useRef<AudioContext | null>(null)
 
-  // === Persistence ===
-  useEffect(() => {
-    const saved = loadState()
-    if (saved && saved.taskId === task.id) {
-      const elapsed = Math.floor((Date.now() - (saved.savedAt || 0)) / 1000)
-      let restored = saved.timeLeft - elapsed
-      if (restored < 0 && saved.phase !== 'overtime' && saved.phase !== 'rest') {
-        setTimeLeft(restored)
-        setPhase('overtime')
-        setDistractions(saved.distractions || [])
-      } else {
-        setTimeLeft(restored)
-        setPhase(saved.phase === 'running' ? 'running' : 'idle')
-        setDistractions(saved.distractions || [])
-      }
-    }
-  }, [task.id])
+  const progress = isOvertime ? 0 : Math.max(0, Math.min(100, ((totalSecs - timeLeft) / totalSecs) * 100))
+  const color = isOvertime ? '#DC2626' : progress > 80 ? '#EF4444' : progress >= 50 ? '#F97316' : '#4ADE80'
+  const bgClass = isOvertime ? 'bg-red-100' : progress > 80 ? 'bg-red-100' : progress >= 50 ? 'bg-orange-100' : 'bg-green-50'
 
-  useEffect(() => {
-    saveState({ taskId: task.id, timeLeft, phase, distractions, savedAt: Date.now() })
-  }, [timeLeft, phase, distractions, task.id])
-
-  useEffect(() => {
-    return () => { if (!timerRef.current) clearState() }
+  /** 嘟声 */
+  const beep = useCallback((freq = 880, dur = 120) => {
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const ctx = audioCtxRef.current
+      const osc = ctx.createOscillator(), g = ctx.createGain()
+      osc.connect(g); g.connect(ctx.destination)
+      osc.frequency.value = freq; osc.type = 'sine'
+      g.gain.setValueAtTime(0.4, ctx.currentTime)
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur / 1000)
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + dur / 1000)
+    } catch {}
   }, [])
 
-  // === Timer ===
+  /** 里程碑检查 */
+  const checkMilestones = useCallback((e: number) => {
+    const rem = totalSecs - e
+    if (rem === 180 && lastReportedRef.current < 180) { speak('时间还剩3分钟'); lastReportedRef.current = 180 }
+    if (rem === 60 && lastReportedRef.current < 60) { speak('时间还剩1分钟'); lastReportedRef.current = 60 }
+    if (rem === 30 && lastReportedRef.current < 30) { speak('时间还剩30秒'); lastReportedRef.current = 30 }
+    if (rem <= 30 && rem > 0 && rem !== lastBeepSecRef.current) { beep(880, 100); lastBeepSecRef.current = rem }
+    if (rem <= 0 && lastReportedRef.current > 0) { const cnt = Math.abs(rem); if (cnt % 2 < 1) beep(660, 80); lastReportedRef.current = rem }
+  }, [beep, totalSecs])
+
+  /** 计时循环 */
   useEffect(() => {
-    if (phase === 'running' || phase === 'overtime') {
-      timerRef.current = setInterval(() => {
-        setTimeLeft(t => {
-          if (t <= 1) {
-            if (phase === 'running') {
-              clearInterval(timerRef.current!)
-              timerRef.current = null
-              setPhase('overtime')
-            }
-            return t - 1
-          }
-          return t - 1
+    if (isRunning) {
+      intervalRef.current = setInterval(() => {
+        setTimeLeft(prev => {
+          const next = prev - 1
+          checkMilestones(next)
+          if (next < 0 && !isOvertime) setIsOvertime(true)
+          if (next < 0) setOvertimeSecs(o => o + 1)
+          return next
         })
       }, 1000)
-    } else {
-      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
-    }
-    return () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null } }
-  }, [phase])
+    } else { if (intervalRef.current) clearInterval(intervalRef.current) }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+  }, [isRunning, checkMilestones, isOvertime])
 
-  // === Computed ===
-  const progress = phase === 'idle' ? 0
-    : phase === 'rest' ? ((totalSecs - timeLeft) / totalSecs) * 100
-    : phase === 'overtime' ? 100
-    : Math.min(100, ((totalSecs - timeLeft) / totalSecs) * 100)
+  /** 持久化 */
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ taskId: task.id, timeLeft, isRunning, isOvertime, overtimeSecs, distractions }))
+  }, [task.id, timeLeft, isRunning, isOvertime, overtimeSecs, distractions])
+  useEffect(() => () => localStorage.removeItem(STORAGE_KEY), [])
 
-  const ringColor = phase === 'idle' ? '#4ADE80'
-    : phase === 'rest' ? '#34D399'
-    : phase === 'overtime' ? '#F87171'
-    : progress > 80 ? '#FBBF24'
-    : progress > 50 ? '#FBBF24'
-    : '#4ADE80'
+  /** 启动 → 初始化 AudioContext（用户交互触发避免被屏蔽） */
+  const handleMainBtn = () => {
+    try { if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)() } catch {}
+    setIsRunning(r => !r)
+  }
 
-  const expectedPoints = Math.floor(task.plannedDuration / 25) + 1
-  const overtimeSecs = phase === 'overtime' ? Math.abs(timeLeft) : 0
-  const penalty = Math.floor(overtimeSecs / 60)
-  const currentPoints = phase === 'overtime' ? -penalty : expectedPoints
+  const calcPts = () => {
+    if (isOvertime) return Math.max(-20, 5 - Math.floor(overtimeSecs / 60) * 2)
+    const r = timeLeft / totalSecs
+    if (r > 0.5) return 10
+    if (r > 0.25) return 8
+    if (r > 0) return 5
+    return 3
+  }
 
-  // === Actions ===
-  const handleStart = () => {
-    startTimeRef.current = Date.now()
-    setPhase('running')
+  const handleComplete = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current)
+    setIsRunning(false); localStorage.removeItem(STORAGE_KEY)
+    onComplete(calcPts(), isOvertime, distractions)
   }
-  const handlePause = () => setPhase('idle')
-  const handleReset = () => {
-    clearInterval(timerRef.current!); timerRef.current = null
-    setTimeLeft(totalSecs); setPhase('idle'); setDistractions([])
-    clearState()
+  const handleCancel = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current)
+    setIsRunning(false); localStorage.removeItem(STORAGE_KEY); onCancel()
   }
-  const handleQuit = () => {
-    clearInterval(timerRef.current!); timerRef.current = null
-    clearState()
-    onCancel()
-  }
-  const handleFinish = () => {
-    clearInterval(timerRef.current!); timerRef.current = null
-    clearState()
-    onComplete(currentPoints, phase === 'overtime', distractions)
-  }
+
   const addDistraction = (type: string) => {
-    setDistractions(d => [...d, { id: Date.now(), type, timestamp: Date.now() }])
+    setDistractions(p => [...p, { id: Date.now(), type, timestamp: Date.now() }])
+    setShowDistraction(false)
   }
 
-  // === Rest screen ===
-  if (phase === 'rest') {
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-b from-green-50 to-emerald-100 px-6">
-        <div className="text-center mb-8">
-          <div className="text-5xl mb-3">🎉</div>
-          <h2 className="text-2xl font-bold text-gray-800">太棒了！</h2>
-          <p className="text-gray-500 mt-1">"{task.name}" 番茄钟完成</p>
-        </div>
-
-        <div className="relative mb-8">
-          <TimerRing progress={progress} color={ringColor} />
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-4xl font-black text-gray-800">{formatTime(timeLeft)}</span>
-            <span className="text-sm text-gray-400 mt-1">休息中</span>
-          </div>
-        </div>
-
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 px-5 py-2 bg-white rounded-full shadow-sm">
-            <span className="text-gray-500 text-sm">获得积分</span>
-            <span className="text-xl font-black text-green-500">+{expectedPoints}</span>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3 w-full max-w-xs">
-          <button onClick={handleFinish} className="w-full py-3.5 bg-green-500 text-white rounded-2xl font-bold text-base shadow-lg active:scale-95 transition-transform">
-            继续学习 →
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // === Quit confirm ===
-  if (showQuit) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-        <div className="bg-white rounded-3xl p-6 w-full max-w-xs text-center">
-          <div className="text-4xl mb-3">🤔</div>
-          <h3 className="text-lg font-bold text-gray-800 mb-2">确认放弃？</h3>
-          <p className="text-sm text-gray-500 mb-6">放弃此次番茄钟，本次不计积分</p>
-          <div className="flex gap-3">
-            <button onClick={() => setShowQuit(false)} className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-2xl font-medium">取消</button>
-            <button onClick={handleQuit} className="flex-1 py-2.5 bg-red-500 text-white rounded-2xl font-medium">确认放弃</button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // === Distraction drawer ===
-  const distractionOverlay = showDistractions ? (
-    <div className="fixed inset-0 z-40 bg-black/30" onClick={() => setShowDistractions(false)} />
-  ) : null
-  const distractionPanel = showDistractions ? (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl p-6 pb-8 shadow-2xl">
-      <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5" />
-      <h3 className="text-base font-bold text-gray-800 mb-4 text-center">记录分心</h3>
-      <div className="grid grid-cols-4 gap-2 mb-5">
-        {DISTRACTIONS.map(d => (
-          <button key={d.type} onClick={() => { addDistraction(d.type); setShowDistractions(false) }}
-            className="flex flex-col items-center gap-1 p-3 rounded-2xl bg-gray-50 hover:bg-gray-100 active:scale-95 transition-all">
-            <span className="text-2xl">{d.emoji}</span>
-            <span className="text-xs text-gray-600">{d.type}</span>
-          </button>
-        ))}
-      </div>
-      <button onClick={() => setShowDistractions(false)} className="w-full py-2.5 bg-gray-100 text-gray-500 rounded-2xl font-medium text-sm">取消</button>
-    </div>
-  ) : null
+  const displayTime = isOvertime ? `+${fmtTime(overtimeSecs)}` : fmtTime(timeLeft)
+  const statusText = isOvertime ? '超时中...' : isRunning ? '专注中' : timeLeft < totalSecs ? '已暂停' : '准备开始'
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-white">
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-5 pt-6 pb-4">
-        <div className="flex items-center gap-2">
-          <span className="px-2.5 py-1 bg-gray-100 rounded-full text-xs font-medium text-gray-500">🍅 {task.subject}</span>
-        </div>
-        <button onClick={() => setShowQuit(true)} className="p-2 -mr-2 text-gray-400 hover:text-gray-600">
-          <X className="w-5 h-5" />
-        </button>
-      </div>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${bgClass}`}>
+      <div className="w-full max-w-sm">
 
-      {/* Task name */}
-      <div className="px-5 mb-2">
-        <h2 className="text-xl font-bold text-gray-800 leading-snug">{task.name}</h2>
-        <p className="text-sm text-gray-400 mt-0.5">{task.plannedDuration} 分钟专注</p>
-      </div>
-
-      {/* Main: Ring + Time */}
-      <div className="flex-1 flex flex-col items-center justify-center -mt-4 px-5">
-        <div className="relative">
-          <TimerRing progress={progress} color={ringColor} />
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            {phase === 'overtime' && (
-              <span className="text-xs font-bold text-red-500 tracking-widest mb-1">超时</span>
-            )}
-            <span className="text-5xl font-black text-gray-800 tracking-tight">
-              {phase === 'overtime' ? `-${formatTime(overtimeSecs)}` : formatTime(timeLeft)}
-            </span>
-            <span className="text-xs text-gray-400 mt-1">
-              {phase === 'idle' ? '准备开始' : phase === 'overtime' ? '超时中' : '专注中'}
-            </span>
+        {/* ── 顶部：科目标签 + 任务名 ── */}
+        <div className="text-center mb-3">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium mb-2"
+            style={{ background: '#F0FDF4', color: '#16A34A' }}>
+            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#16A34A' }}/>
+            {task.subject}
           </div>
+          <div className="text-lg font-bold text-gray-900">{task.name}</div>
+          <div className="text-xs text-gray-400 mt-0.5">计划时间：{task.plannedDuration} 分钟</div>
         </div>
 
-        {/* Points badge */}
-        <div className={`mt-5 inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold shadow-sm ${
-          phase === 'overtime'
-            ? 'bg-red-50 text-red-500'
-            : phase === 'idle'
-            ? 'bg-gray-100 text-gray-400'
-            : 'bg-green-50 text-green-600'
-        }`}>
-          {phase === 'idle' ? `预计 +${expectedPoints} 分` : phase === 'overtime' ? `扣除 ${currentPoints} 分` : `+${expectedPoints} 分`}
-        </div>
-      </div>
+        {/* ── V1.6 卡片 ── */}
+        <div className="bg-white rounded-3xl shadow-xl" style={{ boxShadow: '0 8px 40px rgba(255,107,107,0.12)' }}>
 
-      {/* Bottom controls */}
-      <div className="px-5 pb-10">
-        {/* Distractions tags */}
-        {distractions.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 justify-center mb-4">
-            {distractions.map(d => (
-              <span key={d.id} className="px-2 py-0.5 bg-yellow-50 text-yellow-600 text-xs rounded-full">
-                {DISTRACTIONS.find(x => x.type === d.type)?.emoji} {d.type}
-              </span>
-            ))}
+          {/* 环形区 */}
+          <div className="relative flex items-center justify-center py-4">
+            <TomatoRing progress={progress} isOvertime={isOvertime}/>
+
+            {/* 中心数字 */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <div className="text-5xl font-black leading-none"
+                style={{ color: isOvertime ? '#DC2626' : color, letterSpacing: '-0.04em' }}>
+                {displayTime}
+              </div>
+              <div className="text-sm font-medium mt-1" style={{ color: isOvertime ? '#DC2626' : '#9CA3AF' }}>
+                {statusText}
+              </div>
+              {isOvertime && (
+                <div className="text-xs font-medium mt-0.5" style={{ color: '#DC2626', opacity: 0.7 }}>
+                  累计 {Math.floor((totalSecs + overtimeSecs) / 60)} 分钟
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── 控制按钮 ── */}
+          <div className="flex items-center justify-center gap-3 px-6 pb-4">
+
+            {/* 重置 */}
+            <button onClick={handleCancel}
+              className="w-11 h-11 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 active:scale-95 transition-all">
+              <RotateCcw className="w-5 h-5 text-gray-500"/>
+            </button>
+
+            {/* 主按钮 */}
+            <button onClick={handleMainBtn}
+              className="h-11 px-7 rounded-full flex items-center gap-2 font-bold text-white text-sm shadow-md hover:scale-105 active:scale-95 transition-all"
+              style={{
+                background: isRunning
+                  ? 'linear-gradient(135deg, #F97316, #FB923C)'
+                  : isOvertime ? 'linear-gradient(135deg, #DC2626, #EF4444)'
+                  : 'linear-gradient(135deg, #FF6B6B, #FD79A8)',
+              }}>
+              {isRunning ? (
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              ) : (
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+              )}
+              <span>{isRunning ? '暂停' : isOvertime || timeLeft < totalSecs ? '继续' : '开始'}</span>
+            </button>
+
+            {/* 打扰 */}
+            <button onClick={() => setShowDistraction(true)}
+              className="w-11 h-11 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 active:scale-95 transition-all relative">
+              <span className="text-xl">📝</span>
+              {distractions.length > 0 && (
+                <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-white text-xs font-bold flex items-center justify-center"
+                  style={{ background: color }}>{distractions.length}</div>
+              )}
+            </button>
+          </div>
+
+          {/* ── 完成按钮 ── */}
+          <div className="px-6 pb-4">
+            <button onClick={handleComplete}
+              className="w-full py-3.5 rounded-2xl flex items-center justify-center gap-2 font-bold text-sm transition-all hover:scale-[1.01] active:scale-0.99"
+              style={{
+                background: isOvertime ? '#FEE2E2' : '#FFF0F0',
+                color: isOvertime ? '#DC2626' : '#FF6B6B',
+              }}>
+              <Flag className="w-4 h-4"/>
+              <span>{isOvertime ? `完成（超时 ${Math.floor(overtimeSecs / 60)} 分钟）` : '完成作业'}</span>
+            </button>
+          </div>
+
+          {/* ── 打扰气泡 ── */}
+          {distractions.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-1.5 pb-4 px-6">
+              {distractions.map(d => {
+                const def = DISTRACTION_TYPES.find(x => x.type === d.type)
+                return (
+                  <span key={d.id}
+                    className="text-xs px-2.5 py-1 rounded-full bg-gray-50 border border-gray-200 text-gray-500">
+                    {def?.emoji} {d.type}
+                  </span>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── 打扰弹窗 ── */}
+        {showDistraction && (
+          <div className="mt-3 bg-white rounded-2xl p-4 shadow-lg border border-gray-100">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-gray-800 text-sm">📝 记录打扰</h3>
+              <button onClick={() => setShowDistraction(false)}>
+                <X className="w-4 h-4 text-gray-400"/>
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {DISTRACTION_TYPES.map(d => (
+                <button key={d.type}
+                  onClick={() => addDistraction(d.type)}
+                  className="flex flex-col items-center gap-1 p-2.5 rounded-xl border-2 border-transparent hover:border-red-200 hover:bg-red-50 transition-all">
+                  <span className="text-xl">{d.emoji}</span>
+                  <span className="text-xs text-gray-500">{d.type}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Main action button */}
-        <div className="flex items-center gap-3">
-          {phase === 'idle' ? (
-            <button onClick={handleStart}
-              className="flex-1 flex items-center justify-center gap-2 py-4 bg-green-500 text-white rounded-2xl font-bold text-base shadow-lg active:scale-95 transition-transform">
-              <Play className="w-5 h-5" fill="white" /> 开始专注
-            </button>
-          ) : phase === 'running' ? (
-            <>
-              <button onClick={handlePause}
-                className="flex-1 flex items-center justify-center gap-2 py-4 bg-orange-400 text-white rounded-2xl font-bold text-base shadow-lg active:scale-95 transition-transform">
-                <Pause className="w-5 h-5" fill="white" /> 暂停
-              </button>
-              <button onClick={handleReset}
-                className="p-4 bg-gray-100 text-gray-500 rounded-2xl shadow-sm hover:bg-gray-200 active:scale-95 transition-transform">
-                <RotateCcw className="w-5 h-5" />
-              </button>
-            </>
-          ) : phase === 'overtime' ? (
-            <>
-              <button onClick={handleFinish}
-                className="flex-1 py-4 bg-green-500 text-white rounded-2xl font-bold text-base shadow-lg active:scale-95 transition-transform">
-                结束 · {currentPoints} 分
-              </button>
-              <button onClick={handleReset}
-                className="p-4 bg-gray-100 text-gray-500 rounded-2xl shadow-sm hover:bg-gray-200 active:scale-95 transition-transform">
-                <RotateCcw className="w-5 h-5" />
-              </button>
-            </>
-          ) : null}
-
-          {/* Record distraction */}
-          {(phase === 'running' || phase === 'overtime') && (
-            <button onClick={() => setShowDistractions(true)}
-              className="px-4 py-4 bg-yellow-50 text-yellow-600 rounded-2xl shadow-sm hover:bg-yellow-100 active:scale-95 transition-transform text-sm font-medium">
-              📌
-            </button>
-          )}
-        </div>
       </div>
-
-      {distractionOverlay}
-      {distractionPanel}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Sparkles, BookOpen, Trophy, Play, Plus, Trash2, Star, LogOut, Gift, History, Award, Check, Edit2, Pause, RotateCcw, X, ChevronRight, Users, Clock, Calendar, TrendingUp, User, UserPlus, BarChart3, BookMarked, Timer, Bell, Lock, KeyRound } from 'lucide-react'
-import { getCurrentUser, logout, UserInfo } from './lib/auth'
+import { getCurrentUser, logout, UserInfo, registerAccount, verifyAccount } from './lib/auth'
 import PomodoroTimerPage from './PomodoroTimerPage'
 import { NotificationProvider, useNotifications } from './context/NotificationContext'
 import NotificationsPage from './pages/NotificationsPage'
@@ -47,15 +47,30 @@ interface ClassInfo {
 
 const CHILDREN_KEY = 'homework-hero-children'
 const CLASS_KEY = 'homework-hero-class'
+const ACCOUNTS_KEY = 'homework-hero-accounts'
 
-const SUBJECTS = [
+/** 预设科目（自定义科目运行时动态生成） */
+const PRESET_SUBJECTS = [
   { name: '语文', emoji: '📝', color: 'bg-yellow-100 text-yellow-700' },
   { name: '数学', emoji: '🔢', color: 'bg-blue-100 text-blue-700' },
   { name: '英语', emoji: '📚', color: 'bg-purple-100 text-purple-700' },
   { name: '科学', emoji: '🔬', color: 'bg-green-100 text-green-700' },
   { name: '历史', emoji: '🏛️', color: 'bg-orange-100 text-orange-700' },
-  { name: '其他', emoji: '⭐', color: 'bg-pink-100 text-pink-700' }
+  { name: '其他', emoji: '⭐', color: 'bg-pink-100 text-pink-700' },
 ]
+
+function getSubjectStyle(subjectName: string) {
+  const preset = PRESET_SUBJECTS.find(s => s.name === subjectName)
+  if (preset) return preset
+  // 自定义科目：按名字生成固定颜色
+  const colors = ['bg-indigo-100 text-indigo-700', 'bg-cyan-100 text-cyan-700', 'bg-rose-100 text-rose-700', 'bg-teal-100 text-teal-700', 'bg-amber-100 text-amber-700']
+  const idx = [...subjectName].reduce((acc, c) => acc + c.charCodeAt(0), 0) % colors.length
+  const emojis = ['📖', '🎯', '💡', '🎨', '🔭', '🌏', '📐']
+  const emojiIdx = [...subjectName].reduce((acc, c) => acc + c.charCodeAt(0), 0) % emojis.length
+  return { name: subjectName, emoji: emojis[emojiIdx], color: colors[idx] }
+}
+
+const SUBJECTS = PRESET_SUBJECTS
 
 const DISTRACTIONS = [
   { type: '看手机', emoji: '📱' }, { type: '看电视', emoji: '📺' }, { type: '吃东西', emoji: '🍪' },
@@ -114,27 +129,66 @@ function LoginPage({ onLogin, onForgot }: { onLogin: (user: UserInfo) => void; o
   const [childName, setChildName] = useState('')
   const [classCode, setClassCode] = useState('')
   const [showRoleSelect, setShowRoleSelect] = useState(true)
+  const [isRegister, setIsRegister] = useState(false)
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [loginError, setLoginError] = useState('')
+
+  // registerAccount 和 verifyAccount 从顶层 import 获取
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (role === 'child' && !nickname.trim()) return
-    if (role === 'parent' && !childName.trim()) return
-    if (role === 'teacher' && !classCode.trim()) return
-    const user: UserInfo = { id: Date.now().toString(), nickname: role === 'child' ? nickname : role === 'parent' ? `${childName}的家长` : '老师', role, phone, grade: role === 'child' ? grade : undefined }
-    onLogin(user)
+    setLoginError('')
+    const account = phone.trim() || nickname.trim()
+
+    if (!account) { setLoginError('请输入手机号或昵称'); return }
+
+    if (isRegister) {
+      // 注册模式
+      if (!password) { setLoginError('请设置密码'); return }
+      if (password.length < 4) { setLoginError('密码至少4位'); return }
+      if (password !== confirmPassword) { setLoginError('两次密码不一致'); return }
+      if (role === 'child' && !nickname.trim()) { setLoginError('请输入昵称'); return }
+      if (role === 'parent' && !childName.trim()) { setLoginError('请输入孩子昵称'); return }
+      if (role === 'teacher' && !classCode.trim()) { setLoginError('请输入班级码'); return }
+      const result = registerAccount(account, password)
+      if (!result.success) { setLoginError(result.error || '注册失败'); return }
+      const user: UserInfo = {
+        id: Date.now().toString(),
+        account,
+        nickname: role === 'child' ? nickname : role === 'parent' ? `${childName}的家长` : '老师',
+        role, phone, grade: role === 'child' ? grade : undefined,
+        classCode: role === 'teacher' ? classCode : undefined,
+        createdAt: Date.now(),
+      }
+      onLogin(user)
+    } else {
+      // 登录模式：密码可选（向后兼容V1.6无密码用户）
+      if (password) {
+        if (!verifyAccount(account, password)) { setLoginError('账号或密码错误'); return }
+      }
+      const user: UserInfo = {
+        id: Date.now().toString(),
+        account,
+        nickname: role === 'child' ? nickname : role === 'parent' ? `${childName}的家长` : '老师',
+        role, phone, grade: role === 'child' ? grade : undefined,
+        classCode: role === 'teacher' ? classCode : undefined,
+      }
+      onLogin(user)
+    }
   }
 
   const roles = [
     { id: 'child' as const, icon: '🎒', title: '学生', desc: '做作业、赚积分、兑奖励' },
     { id: 'parent' as const, icon: '👨‍👩‍👧', title: '家长', desc: '查看进度、管理奖励' },
-    { id: 'teacher' as const, icon: '👨‍🏫', title: '老师', desc: '发布作业、班级管理' }
+    { id: 'teacher' as const, icon: '👨‍🏫', title: '老师', desc: '发布作业、班级管理' },
   ]
 
   if (showRoleSelect) {
-    return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><div className="text-center mb-8"><div className="w-20 h-20 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><span className="text-xl">🦸</span></div><h1 className="text-2xl font-black bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] bg-clip-text text-transparent">作业闯关小英雄</h1><p className="text-gray-500 mt-2">让学习更有趣</p></div><div className="space-y-3">{roles.map((r) => (<button key={r.id} onClick={() => { setRole(r.id); setShowRoleSelect(false); }} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r from-[#FFE66D]/20 to-[#FF6B6B]/10 hover:from-[#FFE66D]/40 hover:to-[#FF6B6B]/20 transition-all border-2 border-transparent hover:border-[#FF6B6B]"><span className="text-3xl">{r.icon}</span><div className="text-left"><div className="font-bold text-gray-800">{r.title}</div><div className="text-xs text-gray-500">{r.desc}</div></div><ChevronRight className="w-5 h-5 text-gray-400 ml-auto" /></button>))}</div></div></div>)
+    return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><div className="text-center mb-8"><div className="w-20 h-20 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><span className="text-xl">🦸</span></div><h1 className="text-2xl font-black bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] bg-clip-text text-transparent">作业闯关小英雄</h1><p className="text-gray-500 mt-2">让学习更有趣</p></div><div className="space-y-3">{roles.map((r) => (<button key={r.id} onClick={() => { setRole(r.id); setShowRoleSelect(false); setIsRegister(false); }} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r from-[#FFE66D]/20 to-[#FF6B6B]/10 hover:from-[#FFE66D]/40 hover:to-[#FF6B6B]/20 transition-all border-2 border-transparent hover:border-[#FF6B6B]"><span className="text-3xl">{r.icon}</span><div className="text-left"><div className="font-bold text-gray-800">{r.title}</div><div className="text-xs text-gray-500">{r.desc}</div></div><ChevronRight className="w-5 h-5 text-gray-400 ml-auto" /></button>))}</div></div></div>)
   }
 
-  return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><button onClick={() => setShowRoleSelect(true)} className="flex items-center gap-1 text-gray-500 mb-4"><ChevronRight className="w-4 h-4 rotate-180" /> 返回</button><div className="text-center mb-6"><div className="w-16 h-16 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg"><span className="text-2xl">{roles.find(r => r.id === role)?.icon}</span></div><h2 className="text-xl font-bold text-gray-800">{roles.find(r => r.id === role)?.title}登录</h2></div><form onSubmit={handleSubmit} className="space-y-4">{role === 'child' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">昵称</label><input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="请输入昵称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">年级</label><select value={grade} onChange={(e) => setGrade(e.target.value)} className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none"><option value="">选择年级</option><option value="一年级">一年级</option><option value="二年级">二年级</option><option value="三年级">三年级</option><option value="四年级">四年级</option><option value="五年级">五年级</option><option value="六年级">六年级</option><option value="初一">初一</option><option value="初二">初二</option><option value="初三">初三</option></select></div></>)}{role === 'parent' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">绑定孩子昵称</label><input type="text" value={childName} onChange={(e) => setChildName(e.target.value)} placeholder="请输入孩子昵称" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}{role === 'teacher' && (<><div><label className="block text-sm font-medium text-gray-700 mb-2">手机号</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" /></div><div><label className="block text-sm font-medium text-gray-700 mb-2">班级码</label><input type="text" value={classCode} onChange={(e) => setClassCode(e.target.value)} placeholder="请输入班级码" className="w-full px-4 py-3 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none" required /></div></>)}<button type="submit" className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold text-lg shadow-lg hover:scale-[1.02] transition-transform">登录 ✨</button>{role === 'parent' && (<button type="button" onClick={onForgot} className="w-full py-2 text-center text-sm text-[#4ECDC4] hover:text-[#3dbdb5] mt-1 flex items-center justify-center gap-1"><KeyRound className="w-4 h-4" />忘记密码？找回密码</button>)}</form></div></div>)
+  return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><button onClick={() => { setShowRoleSelect(true); setLoginError(''); setPassword(''); }} className="flex items-center gap-1 text-gray-500 mb-4"><ChevronRight className="w-4 h-4 rotate-180" /> 返回</button><div className="text-center mb-6"><div className="w-16 h-16 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg"><span className="text-2xl">{roles.find(r => r.id === role)?.icon}</span></div><h2 className="text-xl font-bold text-gray-800">{roles.find(r => r.id === role)?.title}{isRegister ? '注册' : '登录'}</h2><p className="text-xs text-gray-400 mt-1">{isRegister ? '创建账户，数据永久保存' : '使用账户密码登录'}</p></div><form onSubmit={handleSubmit} className="space-y-3">{loginError && <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2 rounded-xl">{loginError}</div>}{role === 'child' && (<><div><label className="block text-xs font-medium text-gray-700 mb-1">手机号或昵称（作为账号）</label><input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号或昵称" className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" /></div><div><label className="block text-xs font-medium text-gray-700 mb-1">设置昵称</label><input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="请输入昵称" className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" required /></div><div><label className="block text-xs font-medium text-gray-700 mb-1">年级</label><select value={grade} onChange={(e) => setGrade(e.target.value)} className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm"><option value="">选择年级</option><option value="一年级">一年级</option><option value="二年级">二年级</option><option value="三年级">三年级</option><option value="四年级">四年级</option><option value="五年级">五年级</option><option value="六年级">六年级</option><option value="初一">初一</option><option value="初二">初二</option><option value="初三">初三</option></select></div></>)}{role === 'parent' && (<><div><label className="block text-xs font-medium text-gray-700 mb-1">手机号（作为账号）</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" /></div><div><label className="block text-xs font-medium text-gray-700 mb-1">绑定孩子昵称</label><input type="text" value={childName} onChange={(e) => setChildName(e.target.value)} placeholder="请输入孩子昵称" className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" required /></div></>)}{role === 'teacher' && (<><div><label className="block text-xs font-medium text-gray-700 mb-1">手机号（作为账号）</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" /></div><div><label className="block text-xs font-medium text-gray-700 mb-1">班级码</label><input type="text" value={classCode} onChange={(e) => setClassCode(e.target.value)} placeholder="请输入班级码" className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" required /></div></>)}<div><label className="block text-xs font-medium text-gray-700 mb-1">{isRegister ? '设置密码' : '密码'}</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={isRegister ? '至少4位密码（必填）' : '请输入密码（V1.6用户可为空）'} className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" /></div>{isRegister && (<div><label className="block text-xs font-medium text-gray-700 mb-1">确认密码</label><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="再次输入密码" className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" required /></div>)}<button type="submit" className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold text-base shadow-lg hover:scale-[1.02] transition-transform">{isRegister ? '注册 ✨' : '登录 ✨'}</button><button type="button" onClick={() => { setIsRegister(r => !r); setLoginError(''); setPassword(''); setConfirmPassword(''); }} className="w-full py-2 text-center text-sm text-[#4ECDC4] hover:text-[#3dbdb5] flex items-center justify-center gap-1">{isRegister ? <><ChevronRight className="w-4 h-4 rotate-180" />已有账号？登录</> : <>没有账号？<span className="font-bold">立即注册</span></>}</button>{role === 'parent' && !isRegister && (<button type="button" onClick={onForgot} className="w-full py-2 text-center text-sm text-[#4ECDC4] hover:text-[#3dbdb5] mt-1 flex items-center justify-center gap-1"><KeyRound className="w-4 h-4" />忘记密码？找回密码</button>)}</form></div></div>)
 }
 
 function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) {
@@ -142,6 +196,8 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
   const [tasks, setTasks] = useState<HomeworkTask[]>([])
   const [newTaskName, setNewTaskName] = useState('')
   const [newTaskSubject, setNewTaskSubject] = useState('数学')
+  const [customSubjectName, setCustomSubjectName] = useState('')
+  const [showCustomSubject, setShowCustomSubject] = useState(false)
   const [newTaskDuration, setNewTaskDuration] = useState(25)
   const [showAddTask, setShowAddTask] = useState(false)
   const [stars, setStars] = useState(0)
@@ -194,10 +250,13 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
 
   const addTask = () => {
     if (!newTaskName.trim()) return
-    const newTask: HomeworkTask = { id: Date.now(), name: newTaskName, subject: newTaskSubject, completed: false, cancelled: false, pomodorosCompleted: 0, plannedDuration: newTaskDuration, status: 'pending' }
+    const subjectName = newTaskSubject === '__custom__' ? customSubjectName.trim() || '自定义' : newTaskSubject
+    const newTask: HomeworkTask = { id: Date.now(), name: newTaskName, subject: subjectName, completed: false, cancelled: false, pomodorosCompleted: 0, plannedDuration: newTaskDuration, status: 'pending' }
     setTasks([...tasks, newTask])
     setNewTaskName('')
     setNewTaskDuration(25)
+    setCustomSubjectName('')
+    setShowCustomSubject(false)
     setShowAddTask(false)
     saveData()
   }
@@ -309,9 +368,16 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
         {showAddTask && (
           <div className="bg-white rounded-2xl p-4 shadow-lg mb-3 border-2 border-[#4ECDC4]/30">
             <input type="text" value={newTaskName} onChange={(e) => setNewTaskName(e.target.value)} placeholder="输入作业名称..." className="w-full px-3 py-2 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none mb-3 text-sm" autoFocus />
-            <div className="flex gap-1.5 mb-3 overflow-x-auto">{SUBJECTS.map(s => (<button key={s.name} onClick={() => setNewTaskSubject(s.name)} className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${newTaskSubject === s.name ? s.color + ' ring-2 ring-[#FF6B6B]' : 'bg-gray-100'}`}>{s.emoji} {s.name}</button>))}</div>
-            <div className="mb-3"><label className="block text-xs text-gray-500 mb-1">计划时长 (1-120分钟)</label><input type="number" min="1" max="120" value={newTaskDuration} onChange={(e) => { const val = Number(e.target.value); if (val >= 1 && val <= 120) setNewTaskDuration(val); else if (val > 120) setNewTaskDuration(120); else if (val < 1) setNewTaskDuration(1); }} className="w-full px-2 py-1.5 border-2 border-[#FF6B6B] rounded-xl text-sm" placeholder="输入1-120之间的分钟数" /></div>
-            <div className="flex gap-2"><button onClick={addTask} className="flex-1 py-2 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-medium text-sm">添加</button><button onClick={() => setShowAddTask(false)} className="px-4 py-2 bg-gray-200 text-gray-600 rounded-xl font-medium text-sm">取消</button></div>
+            {/* 科目选择 */}
+            <div className="flex gap-1.5 mb-2 flex-wrap">{PRESET_SUBJECTS.map(s => (<button key={s.name} onClick={() => { setNewTaskSubject(s.name); setShowCustomSubject(false); }} className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${newTaskSubject === s.name && !showCustomSubject ? s.color + ' ring-2 ring-[#FF6B6B]' : 'bg-gray-100'}`}>{s.emoji} {s.name}</button>))}<button onClick={() => { setNewTaskSubject('__custom__'); setShowCustomSubject(true); }} className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${showCustomSubject ? 'bg-indigo-100 text-indigo-700 ring-2 ring-[#FF6B6B]' : 'bg-gray-100'}`}>✏️ 自定义</button></div>
+            {showCustomSubject && (<input type="text" value={customSubjectName} onChange={(e) => setCustomSubjectName(e.target.value)} placeholder="输入科目名称，如：体育、编程..." className="w-full px-3 py-2 border-2 border-indigo-200 rounded-xl focus:border-indigo-400 focus:outline-none mb-3 text-sm" autoFocus />)}
+            {/* 时长选择 */}
+            <div className="mb-3">
+              <label className="block text-xs text-gray-500 mb-1">计划时长</label>
+              <div className="flex flex-wrap gap-1.5 mb-2">{[15, 25, 30, 45, 60].map(d => (<button key={d} onClick={() => setNewTaskDuration(d)} className={`px-3 py-1 rounded-full text-xs font-bold ${newTaskDuration === d ? 'bg-[#FF6B6B] text-white' : 'bg-gray-100 text-gray-600'}`}>{d}分钟</button>))}</div>
+              <div className="flex items-center gap-2"><span className="text-xs text-gray-400 whitespace-nowrap">自定义：</span><input type="number" min="1" max="180" value={newTaskDuration} onChange={(e) => { const val = Number(e.target.value); setNewTaskDuration(val >= 1 && val <= 180 ? val : val > 180 ? 180 : 1); }} className="flex-1 px-2 py-1.5 border-2 border-[#FF6B6B] rounded-xl text-sm text-center" /><span className="text-xs text-gray-500">分钟（1-180）</span></div>
+            </div>
+            <div className="flex gap-2"><button onClick={addTask} className="flex-1 py-2 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-medium text-sm">添加</button><button onClick={() => { setShowAddTask(false); setShowCustomSubject(false); setCustomSubjectName(''); }} className="px-4 py-2 bg-gray-200 text-gray-600 rounded-xl font-medium text-sm">取消</button></div>
           </div>
         )}
 
@@ -324,7 +390,7 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
                 <div className="flex items-center gap-3">
                   <button onClick={() => !task.completed && completeTask(task.id)} disabled={task.status === 'in_progress'} className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${task.completed ? 'bg-[#4ECDC4] border-[#4ECDC4]' : task.status === 'in_progress' ? 'bg-[#FFE66D] border-[#FFE66D] animate-pulse' : 'border-[#FFE66D] hover:border-[#4ECDC4]'}`}>{task.completed && <Check className="w-4 h-4 text-white" />}{task.status === 'in_progress' && <Play className="w-3 h-3 text-white" />}</button>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2"><span className={`px-1.5 py-0.5 rounded text-xs font-medium ${SUBJECTS.find(s => s.name === task.subject)?.color || 'bg-gray-100'}`}>{SUBJECTS.find(s => s.name === task.subject)?.emoji}</span><span className={`font-medium text-sm truncate ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>{task.name}</span></div>
+                    <div className="flex items-center gap-2"><span className={`px-1.5 py-0.5 rounded text-xs font-medium ${getSubjectStyle(task.subject).color}`}>{getSubjectStyle(task.subject).emoji} {task.subject}</span><span className={`font-medium text-sm truncate ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>{task.name}</span></div>
                     <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5"><Clock className="w-3 h-3" />{task.plannedDuration}分钟 {task.pomodorosCompleted > 0 && <span className="text-[#4ECDC4]">• 🍅 {task.pomodorosCompleted}</span>}</div>
                   </div>
                   <div className="flex gap-1">
@@ -847,7 +913,18 @@ function AppInner() {
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(null)
   const [showForgot, setShowForgot] = useState(false)
 
-  useEffect(() => { const user = getCurrentUser(); if (user) { setIsLoggedIn(true); setCurrentUser(user) } }, [])
+  // ── 初始化：若无账号则自动注册 Cindy 测试账号 ──
+  useEffect(() => {
+    // 确保 Cindy 账号存在（密码: cindy123）
+    const cindyAccount = 'Cindy'
+    const cindyPassword = 'cindy123'
+    if (!verifyAccount(cindyAccount, cindyPassword)) {
+      registerAccount(cindyAccount, cindyPassword)
+    }
+    // 自动以 Cindy 登录（首次）
+    const user = getCurrentUser()
+    if (user) { setIsLoggedIn(true); setCurrentUser(user) }
+  }, [])
 
   const handleLogin = (user: UserInfo) => {
     setCurrentUser(user)
