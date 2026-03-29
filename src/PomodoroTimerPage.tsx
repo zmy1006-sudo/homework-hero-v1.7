@@ -134,12 +134,17 @@ export default function PomodoroTimerPage({ task, onComplete, onCancel }: Props)
     try {
       if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
       const ctx = audioCtxRef.current
-      const osc = ctx.createOscillator(), g = ctx.createGain()
-      osc.connect(g); g.connect(ctx.destination)
-      osc.frequency.value = freq; osc.type = 'sine'
-      g.gain.setValueAtTime(0.4, ctx.currentTime)
+      // 柔和铃声：正弦波 + 泛音叠加，再加渐变衰减
+      const osc1 = ctx.createOscillator(), osc2 = ctx.createOscillator()
+      const g = ctx.createGain()
+      osc1.connect(g); osc2.connect(g); g.connect(ctx.destination)
+      osc1.frequency.value = freq
+      osc2.frequency.value = freq * 2   // 泛音（高八度）
+      osc1.type = 'sine'; osc2.type = 'sine'
+      g.gain.setValueAtTime(0.25, ctx.currentTime)
       g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur / 1000)
-      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + dur / 1000)
+      osc1.start(ctx.currentTime); osc1.stop(ctx.currentTime + dur / 1000)
+      osc2.start(ctx.currentTime); osc2.stop(ctx.currentTime + dur / 1000)
     } catch {}
   }
 
@@ -187,22 +192,22 @@ export default function PomodoroTimerPage({ task, onComplete, onCancel }: Props)
     <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${bgClass}`}>
       <div className="w-full max-w-sm">
 
-        {/* 科目标签 + 任务名 */}
-        <div className="text-center mb-3">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium mb-2"
-            style={{ background: '#F0FDF4', color: '#16A34A' }}>
-            <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#16A34A' }}/>
+        {/* 科目标签 + 任务名（放大醒目） */}
+        <div className="text-center px-4 pt-4 pb-2">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold mb-3"
+            style={{ background: '#F0FDF4', color: '#16A34A', letterSpacing: '0.02em' }}>
+            <div className="w-2 h-2 rounded-full" style={{ background: '#16A34A' }}/>
             {task.subject}
           </div>
-          <div className="text-lg font-bold text-gray-900">{task.name}</div>
-          <div className="text-xs text-gray-400 mt-0.5">计划时间：{task.plannedDuration} 分钟</div>
+          <div className="text-2xl font-black text-gray-900 leading-tight">{task.name}</div>
+          <div className="text-sm text-gray-400 mt-1">计划时间：{task.plannedDuration} 分钟</div>
         </div>
 
         {/* 卡片 */}
-        <div className="bg-white rounded-3xl shadow-xl" style={{ boxShadow: '0 8px 40px rgba(255,107,107,0.12)' }}>
+        <div className="bg-white rounded-3xl shadow-xl pt-2" style={{ boxShadow: '0 8px 40px rgba(255,107,107,0.12)' }}>
 
           {/* 环形 */}
-          <div className="relative flex items-center justify-center py-4">
+          <div className="relative flex items-center justify-center py-5">
             <TomatoRing progress={progress} isOvertime={isOvertime} size={280}/>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <div className="text-5xl font-black leading-none" style={{ color: isOvertime ? '#DC2626' : color, letterSpacing: '-0.04em' }}>
