@@ -56,7 +56,6 @@ const PRESET_SUBJECTS = [
   { name: '英语', emoji: '📚', color: 'bg-purple-100 text-purple-700' },
   { name: '科学', emoji: '🔬', color: 'bg-green-100 text-green-700' },
   { name: '历史', emoji: '🏛️', color: 'bg-orange-100 text-orange-700' },
-  { name: '其他', emoji: '⭐', color: 'bg-pink-100 text-pink-700' },
 ]
 
 function getSubjectStyle(subjectName: string) {
@@ -391,6 +390,7 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
   const [unlockedAchievements, setUnlockedAchievements] = useState<string[]>([])
   const [records, setRecords] = useState<Record[]>([])
   const [activeTimer, setActiveTimer] = useState<HomeworkTask | null>(null)
+  const [pointsToast, setPointsToast] = useState<{ pts: number; overtime: boolean; name: string } | null>(null)
 
   useEffect(() => {
     const savedStars = localStorage.getItem(STARS_KEY)
@@ -491,6 +491,10 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
     }
     checkAchievements()
     saveData()
+    // 积分弹窗提示
+    setPointsToast({ pts: points, overtime: isOvertime, name: activeTimer.name })
+    setTimeout(() => setPointsToast(null), 3500)
+
     setActiveTimer(null)
 
     // ⏰ 通知家长：任务完成/超时
@@ -554,8 +558,21 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
             {/* 时长选择 */}
             <div className="mb-3">
               <label className="block text-xs text-gray-500 mb-1">计划时长</label>
-              <div className="flex flex-wrap gap-1.5 mb-2">{[15, 25, 30, 45, 60].map(d => (<button key={d} onClick={() => setNewTaskDuration(d)} className={`px-3 py-1 rounded-full text-xs font-bold ${newTaskDuration === d ? 'bg-[#FF6B6B] text-white' : 'bg-gray-100 text-gray-600'}`}>{d}分钟</button>))}</div>
-              <div className="flex items-center gap-2"><span className="text-xs text-gray-400 whitespace-nowrap">自定义：</span><input type="number" min="1" max="180" value={newTaskDuration} onChange={(e) => { const val = Number(e.target.value); setNewTaskDuration(val >= 1 && val <= 180 ? val : val > 180 ? 180 : 1); }} className="flex-1 px-2 py-1.5 border-2 border-[#FF6B6B] rounded-xl text-sm text-center" /><span className="text-xs text-gray-500">分钟（1-180）</span></div>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {[15, 25, 45].map(d => (<button key={d} onClick={() => setNewTaskDuration(d)}
+                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${newTaskDuration === d ? 'bg-[#FF6B6B] text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-red-50'}`}>
+                  {d}分钟
+                </button>))}
+              </div>
+              <div className="flex items-center gap-2 px-1">
+                <span className="text-xs text-gray-500 whitespace-nowrap">自定义：</span>
+                <input type="number" min="1" max="180"
+                  value={![15,25,45].includes(newTaskDuration) ? newTaskDuration : ''}
+                  placeholder="输入任意分钟"
+                  onChange={(e) => { const val = Number(e.target.value); if(val>=1&&val<=180) setNewTaskDuration(val) }}
+                  className="flex-1 px-2 py-1.5 border-2 border-[#FF6B6B] rounded-xl text-sm text-center focus:outline-none focus:ring-2 focus:ring-red-200"/>
+                <span className="text-xs text-gray-400 whitespace-nowrap">分钟</span>
+              </div>
             </div>
             <div className="flex gap-2"><button onClick={addTask} className="flex-1 py-2 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-medium text-sm">添加</button><button onClick={() => { setShowAddTask(false); setShowCustomSubject(false); setCustomSubjectName(''); }} className="px-4 py-2 bg-gray-200 text-gray-600 rounded-xl font-medium text-sm">取消</button></div>
           </div>
@@ -844,6 +861,25 @@ function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => v
       </nav>
 
       {activeTimer && <PomodoroTimerPage task={activeTimer} onComplete={handleTimerComplete} onCancel={() => setActiveTimer(null)} />}
+
+      {/* 积分提示 Toast */}
+      {pointsToast && (
+        <div className="fixed top-6 left-1/2 transform -translate-x-1/2 z-[100] animate-toast-in">
+          <div className={`px-6 py-4 rounded-2xl shadow-2xl text-white text-center min-w-[200px] ${
+            pointsToast.pts >= 0
+              ? 'bg-gradient-to-r from-[#4ADE80] to-[#22C55E]'
+              : 'bg-gradient-to-r from-[#EF4444] to-[#DC2626]'
+          }`}>
+            <div className="text-3xl mb-1">{pointsToast.pts >= 0 ? '🎉' : '⏰'}</div>
+            <div className={`text-xl font-black`}>{pointsToast.pts >= 0 ? `+${pointsToast.pts}` : pointsToast.pts} 积分</div>
+            <div className="text-xs opacity-90 mt-1">
+              {pointsToast.pts >= 0
+                ? `完成 "${pointsToast.name}"，继续加油！`
+                : `任务超时，扣了 ${Math.abs(pointsToast.pts)} 分，下次注意！`}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
