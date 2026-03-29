@@ -122,60 +122,68 @@ const REWARDS_KEY = 'homework-hero-rewards'
 function getCurrentRank(points: number): typeof RANKS[0] { return RANKS.find(r => points >= r.minPoints && points < r.maxPoints) || RANKS[0] }
 
 function LoginPage({ onLogin, onForgot }: { onLogin: (user: UserInfo) => void; onForgot: () => void }) {
+  const [mode, setMode] = useState<'login' | 'register-role' | 'register-form'>('login')
   const [role, setRole] = useState<'child' | 'parent' | 'teacher'>('child')
   const [phone, setPhone] = useState('')
   const [nickname, setNickname] = useState('')
   const [grade, setGrade] = useState('')
   const [childName, setChildName] = useState('')
   const [classCode, setClassCode] = useState('')
-  const [showRoleSelect, setShowRoleSelect] = useState(true)
-  const [isRegister, setIsRegister] = useState(false)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loginError, setLoginError] = useState('')
 
-  // registerAccount 和 verifyAccount 从顶层 import 获取
+  /** 快速测试登录：Cindy 账号 */
+  const handleQuickTest = () => {
+    // Cindy 默认已注册，账号: Cindy，密码: cindy123
+    registerAccount('Cindy', 'cindy123')  // 确保存在
+    const user: UserInfo = {
+      id: 'cindy-test',
+      account: 'Cindy',
+      nickname: 'Cindy',
+      role: 'child',
+    }
+    onLogin(user)
+  }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
     setLoginError('')
-    const account = phone.trim() || nickname.trim()
-
-    if (!account) { setLoginError('请输入手机号或昵称'); return }
-
-    if (isRegister) {
-      // 注册模式
-      if (!password) { setLoginError('请设置密码'); return }
-      if (password.length < 4) { setLoginError('密码至少4位'); return }
-      if (password !== confirmPassword) { setLoginError('两次密码不一致'); return }
-      if (role === 'child' && !nickname.trim()) { setLoginError('请输入昵称'); return }
-      if (role === 'parent' && !childName.trim()) { setLoginError('请输入孩子昵称'); return }
-      if (role === 'teacher' && !classCode.trim()) { setLoginError('请输入班级码'); return }
-      const result = registerAccount(account, password)
-      if (!result.success) { setLoginError(result.error || '注册失败'); return }
-      const user: UserInfo = {
-        id: Date.now().toString(),
-        account,
-        nickname: role === 'child' ? nickname : role === 'parent' ? `${childName}的家长` : '老师',
-        role, phone, grade: role === 'child' ? grade : undefined,
-        classCode: role === 'teacher' ? classCode : undefined,
-        createdAt: Date.now(),
-      }
-      onLogin(user)
-    } else {
-      // 登录模式：密码可选（向后兼容V1.6无密码用户）
-      if (password) {
-        if (!verifyAccount(account, password)) { setLoginError('账号或密码错误'); return }
-      }
-      const user: UserInfo = {
-        id: Date.now().toString(),
-        account,
-        nickname: role === 'child' ? nickname : role === 'parent' ? `${childName}的家长` : '老师',
-        role, phone, grade: role === 'child' ? grade : undefined,
-        classCode: role === 'teacher' ? classCode : undefined,
-      }
-      onLogin(user)
+    const account = phone.trim()
+    if (!account) { setLoginError('请输入手机号'); return }
+    if (!password) { setLoginError('请输入密码'); return }
+    if (!verifyAccount(account, password)) { setLoginError('账号或密码错误'); return }
+    const user: UserInfo = {
+      id: Date.now().toString(),
+      account,
+      nickname: role === 'child' ? nickname : role === 'parent' ? `${childName}的家长` : '老师',
+      role, phone, grade: role === 'child' ? grade : undefined,
     }
+    onLogin(user)
+  }
+
+  const handleRegister = (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoginError('')
+    const account = phone.trim()
+    if (!account) { setLoginError('请输入手机号'); return }
+    if (!password) { setLoginError('请设置密码'); return }
+    if (password.length < 4) { setLoginError('密码至少4位'); return }
+    if (password !== confirmPassword) { setLoginError('两次密码不一致'); return }
+    if (role === 'child' && !nickname.trim()) { setLoginError('请输入昵称'); return }
+    if (role === 'parent' && !childName.trim()) { setLoginError('请输入孩子昵称'); return }
+    if (role === 'teacher' && !classCode.trim()) { setLoginError('请输入班级码'); return }
+    const result = registerAccount(account, password)
+    if (!result.success) { setLoginError(result.error || '注册失败'); return }
+    const user: UserInfo = {
+      id: Date.now().toString(),
+      account,
+      nickname: role === 'child' ? nickname : role === 'parent' ? `${childName}的家长` : '老师',
+      role, phone, grade: role === 'child' ? grade : undefined,
+      classCode: role === 'teacher' ? classCode : undefined,
+      createdAt: Date.now(),
+    }
+    onLogin(user)
   }
 
   const roles = [
@@ -184,11 +192,183 @@ function LoginPage({ onLogin, onForgot }: { onLogin: (user: UserInfo) => void; o
     { id: 'teacher' as const, icon: '👨‍🏫', title: '老师', desc: '发布作业、班级管理' },
   ]
 
-  if (showRoleSelect) {
-    return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><div className="text-center mb-8"><div className="w-20 h-20 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"><span className="text-xl">🦸</span></div><h1 className="text-2xl font-black bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] bg-clip-text text-transparent">作业闯关小英雄</h1><p className="text-gray-500 mt-2">让学习更有趣</p></div><div className="space-y-3">{roles.map((r) => (<button key={r.id} onClick={() => { setRole(r.id); setShowRoleSelect(false); setIsRegister(false); }} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r from-[#FFE66D]/20 to-[#FF6B6B]/10 hover:from-[#FFE66D]/40 hover:to-[#FF6B6B]/20 transition-all border-2 border-transparent hover:border-[#FF6B6B]"><span className="text-3xl">{r.icon}</span><div className="text-left"><div className="font-bold text-gray-800">{r.title}</div><div className="text-xs text-gray-500">{r.desc}</div></div><ChevronRight className="w-5 h-5 text-gray-400 ml-auto" /></button>))}</div></div></div>)
+  const GRADE_OPTIONS = ['一年级','二年级','三年级','四年级','五年级','六年级','初一','初二','初三']
+
+  /* ── 角色选择（注册第一步）── */
+  if (mode === 'register-role') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full">
+          <button onClick={() => setMode('login')} className="flex items-center gap-1 text-gray-500 mb-4 text-sm">
+            <ChevronRight className="w-4 h-4 rotate-180"/> 返回登录
+          </button>
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
+              <span className="text-2xl">🦸</span>
+            </div>
+            <h2 className="text-xl font-bold text-gray-800">选择您的身份</h2>
+            <p className="text-xs text-gray-400 mt-1">注册新账户</p>
+          </div>
+          <div className="space-y-3">
+            {roles.map(r => (
+              <button key={r.id}
+                onClick={() => { setRole(r.id); setMode('register-form') }}
+                className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-gray-100 hover:border-[#FF6B6B] hover:bg-red-50/50 transition-all">
+                <span className="text-3xl">{r.icon}</span>
+                <div className="text-left">
+                  <div className="font-bold text-gray-800">{r.title}</div>
+                  <div className="text-xs text-gray-500">{r.desc}</div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-400 ml-auto"/>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
   }
 
-  return (<div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4"><div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full"><button onClick={() => { setShowRoleSelect(true); setLoginError(''); setPassword(''); }} className="flex items-center gap-1 text-gray-500 mb-4"><ChevronRight className="w-4 h-4 rotate-180" /> 返回</button><div className="text-center mb-6"><div className="w-16 h-16 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg"><span className="text-2xl">{roles.find(r => r.id === role)?.icon}</span></div><h2 className="text-xl font-bold text-gray-800">{roles.find(r => r.id === role)?.title}{isRegister ? '注册' : '登录'}</h2><p className="text-xs text-gray-400 mt-1">{isRegister ? '创建账户，数据永久保存' : '使用账户密码登录'}</p></div><form onSubmit={handleSubmit} className="space-y-3">{loginError && <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2 rounded-xl">{loginError}</div>}{role === 'child' && (<><div><label className="block text-xs font-medium text-gray-700 mb-1">手机号或昵称（作为账号）</label><input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号或昵称" className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" /></div><div><label className="block text-xs font-medium text-gray-700 mb-1">设置昵称</label><input type="text" value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="请输入昵称" className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" required /></div><div><label className="block text-xs font-medium text-gray-700 mb-1">年级</label><select value={grade} onChange={(e) => setGrade(e.target.value)} className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm"><option value="">选择年级</option><option value="一年级">一年级</option><option value="二年级">二年级</option><option value="三年级">三年级</option><option value="四年级">四年级</option><option value="五年级">五年级</option><option value="六年级">六年级</option><option value="初一">初一</option><option value="初二">初二</option><option value="初三">初三</option></select></div></>)}{role === 'parent' && (<><div><label className="block text-xs font-medium text-gray-700 mb-1">手机号（作为账号）</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" /></div><div><label className="block text-xs font-medium text-gray-700 mb-1">绑定孩子昵称</label><input type="text" value={childName} onChange={(e) => setChildName(e.target.value)} placeholder="请输入孩子昵称" className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" required /></div></>)}{role === 'teacher' && (<><div><label className="block text-xs font-medium text-gray-700 mb-1">手机号（作为账号）</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="请输入手机号" className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" /></div><div><label className="block text-xs font-medium text-gray-700 mb-1">班级码</label><input type="text" value={classCode} onChange={(e) => setClassCode(e.target.value)} placeholder="请输入班级码" className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" required /></div></>)}<div><label className="block text-xs font-medium text-gray-700 mb-1">{isRegister ? '设置密码' : '密码'}</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={isRegister ? '至少4位密码（必填）' : '请输入密码（V1.6用户可为空）'} className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" /></div>{isRegister && (<div><label className="block text-xs font-medium text-gray-700 mb-1">确认密码</label><input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="再次输入密码" className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm" required /></div>)}<button type="submit" className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold text-base shadow-lg hover:scale-[1.02] transition-transform">{isRegister ? '注册 ✨' : '登录 ✨'}</button><button type="button" onClick={() => { setIsRegister(r => !r); setLoginError(''); setPassword(''); setConfirmPassword(''); }} className="w-full py-2 text-center text-sm text-[#4ECDC4] hover:text-[#3dbdb5] flex items-center justify-center gap-1">{isRegister ? <><ChevronRight className="w-4 h-4 rotate-180" />已有账号？登录</> : <>没有账号？<span className="font-bold">立即注册</span></>}</button>{role === 'parent' && !isRegister && (<button type="button" onClick={onForgot} className="w-full py-2 text-center text-sm text-[#4ECDC4] hover:text-[#3dbdb5] mt-1 flex items-center justify-center gap-1"><KeyRound className="w-4 h-4" />忘记密码？找回密码</button>)}</form></div></div>)
+  /* ── 注册表单（注册第二步）── */
+  if (mode === 'register-form') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full">
+          <button onClick={() => setMode('register-role')} className="flex items-center gap-1 text-gray-500 mb-4 text-sm">
+            <ChevronRight className="w-4 h-4 rotate-180"/> 返回选择身份
+          </button>
+          <div className="text-center mb-6">
+            <div className="w-14 h-14 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-2 shadow-lg">
+              <span className="text-2xl">{roles.find(r => r.id === role)?.icon}</span>
+            </div>
+            <h2 className="text-lg font-bold text-gray-800">{roles.find(r => r.id === role)?.title}注册</h2>
+          </div>
+          <form onSubmit={handleRegister} className="space-y-3">
+            {loginError && <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2 rounded-xl">{loginError}</div>}
+
+            {/* 手机号 */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">手机号（作为账号）<span className="text-red-400">*</span></label>
+              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="请输入手机号"
+                className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm"/>
+            </div>
+
+            {/* 学生额外字段 */}
+            {role === 'child' && <>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">昵称 <span className="text-red-400">*</span></label>
+                <input type="text" value={nickname} onChange={e => setNickname(e.target.value)} placeholder="给自己取个昵称"
+                  className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm"/>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">年级</label>
+                <select value={grade} onChange={e => setGrade(e.target.value)}
+                  className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm">
+                  <option value="">选择年级</option>
+                  {GRADE_OPTIONS.map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+            </>}
+
+            {/* 家长额外字段 */}
+            {role === 'parent' && <>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">孩子昵称 <span className="text-red-400">*</span></label>
+                <input type="text" value={childName} onChange={e => setChildName(e.target.value)} placeholder="请输入孩子昵称"
+                  className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm"/>
+              </div>
+            </>}
+
+            {/* 老师额外字段 */}
+            {role === 'teacher' && <>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">班级码 <span className="text-red-400">*</span></label>
+                <input type="text" value={classCode} onChange={e => setClassCode(e.target.value)} placeholder="请输入班级码"
+                  className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm"/>
+              </div>
+            </>}
+
+            {/* 密码 */}
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">设置密码 <span className="text-red-400">*</span></label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="至少4位"
+                className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm"/>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">确认密码 <span className="text-red-400">*</span></label>
+              <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="再次输入密码"
+                className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm"/>
+            </div>
+
+            <button type="submit" className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold text-base shadow-lg hover:scale-[1.02] transition-transform">
+              完成注册 ✨
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
+  /* ── 登录页（默认）── */
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-pink-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full">
+
+        {/* Logo */}
+        <div className="text-center mb-6">
+          <div className="w-20 h-20 bg-gradient-to-br from-[#FF6B6B] to-[#FD79A8] rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+            <span className="text-xl">🦸</span>
+          </div>
+          <h1 className="text-2xl font-black bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] bg-clip-text text-transparent">
+            作业闯关小英雄
+          </h1>
+          <p className="text-gray-500 mt-2">让学习更有趣</p>
+        </div>
+
+        {/* 快速测试入口 */}
+        <button onClick={handleQuickTest}
+          className="w-full py-3 px-4 mb-4 bg-gradient-to-r from-[#4ADE80] to-[#22C55E] text-white rounded-xl font-bold text-base shadow-lg hover:scale-[1.02] transition-transform flex items-center justify-center gap-2">
+          🚀 直接进入测试（Cindy账号）
+        </button>
+
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex-1 h-px bg-gray-200"/>
+          <span className="text-xs text-gray-400">或使用账户登录</span>
+          <div className="flex-1 h-px bg-gray-200"/>
+        </div>
+
+        {/* 登录表单 */}
+        <form onSubmit={handleLogin} className="space-y-3">
+          {loginError && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-3 py-2 rounded-xl">{loginError}</div>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">手机号</label>
+            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="请输入手机号"
+              className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm"/>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">密码</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="请输入密码"
+              className="w-full px-3 py-2.5 border-2 border-[#FFE66D] rounded-xl focus:border-[#FF6B6B] focus:outline-none text-sm"/>
+          </div>
+
+          <button type="submit"
+            className="w-full py-3 bg-gradient-to-r from-[#FF6B6B] to-[#FD79A8] text-white rounded-xl font-bold text-base shadow-lg hover:scale-[1.02] transition-transform">
+            登录 ✨
+          </button>
+        </form>
+
+        <div className="mt-3 text-center">
+          <button onClick={() => { setMode('register-role'); setLoginError(''); setPassword(''); }}
+            className="text-sm text-[#4ECDC4] hover:text-[#3dbdb5]">
+            没有账号？<span className="font-bold">立即注册</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function StudentHomePage({ user, onLogout }: { user: UserInfo; onLogout: () => void }) {
@@ -913,18 +1093,7 @@ function AppInner() {
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(null)
   const [showForgot, setShowForgot] = useState(false)
 
-  // ── 初始化：若无账号则自动注册 Cindy 测试账号 ──
-  useEffect(() => {
-    // 确保 Cindy 账号存在（密码: cindy123）
-    const cindyAccount = 'Cindy'
-    const cindyPassword = 'cindy123'
-    if (!verifyAccount(cindyAccount, cindyPassword)) {
-      registerAccount(cindyAccount, cindyPassword)
-    }
-    // 自动以 Cindy 登录（首次）
-    const user = getCurrentUser()
-    if (user) { setIsLoggedIn(true); setCurrentUser(user) }
-  }, [])
+  useEffect(() => { const user = getCurrentUser(); if (user) { setIsLoggedIn(true); setCurrentUser(user) } }, [])
 
   const handleLogin = (user: UserInfo) => {
     setCurrentUser(user)
